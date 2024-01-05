@@ -2,10 +2,10 @@
 
 from scipy.integrate import solve_ivp
 import numpy as np
-from numba import njit
+#from numba import njit
 
 # Refactor the dcdt method into a standalone function to be compiled into machine code
-@njit
+#@njit
 def dcdt_four(t, concArr, params):
     """
     Define the function that describes the rate of change of the concentrations

@@ -1,13 +1,9 @@
 # GeKiM (Generalized Kinetic Modeler)
 
-## Overview
-GeKiM (Generalized Kinetic Modeler) is a Python package designed for modeling arbitrary kinetic schemes with a focus on biochemical systems. It provides a flexible framework for simulating and analyzing the kinetics of complex reactions, enabling researchers and scientists to gain insights into the dynamics of biochemical processes.
+## Description
+GeKiM (Generalized Kinetic Modeler) is a Python package designed for creating, interpreting, and modeling arbitrary kinetic schemes with a focus on covalent inhibition. Schemes are defined by the user in a dictionary of species and transitions. These are then used to create instances of the NState class, which include methods of simulating and analyzing itself. 
 
-## Features
-- **Versatile Kinetic Modeling:** Allows the definition of a wide range of kinetic models, supporting various types of biochemical reactions.
-- **Robust ODE Solving:** Utilizes efficient numerical methods to solve ordinary differential equations (ODEs) arising from kinetic models.
-- **Intuitive Configuration:** Kinetic schemes and species can be easily configured using a simple, user-friendly format.
-- **Detailed Logging and Analysis:** Provides capabilities for detailed logging of simulation processes and comprehensive analysis of results.
+The package also contains classes for common schemes, which come with scheme-specific analyses and metrics (e.g., ThreeState.KI, AXD.jacobian).
 
 ## Installation
 For now, you can only install GeKiM directly from the source code:

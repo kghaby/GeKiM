@@ -1,5 +1,8 @@
 from setuptools import setup, find_packages
 
+with open('requirements.txt') as f:
+    required = f.read().splitlines()
+
 setup(
     name='GeKiM', 
     version='0.1.0', 
@@ -12,10 +15,7 @@ setup(
     packages=find_packages(where="src"), 
     package_dir={"": "src"},
     include_package_data=True,
-    install_requires=[
-        'numpy', 
-        'scipy', 
-    ],
+    install_requires=required,
     classifiers=[
         'Development Status :: 3 - Alpha', 
         'Intended Audience :: Science/Research',

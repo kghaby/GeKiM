@@ -114,7 +114,7 @@ def assign_colors_to_species(schemes, saturation_range=(0.5, 0.7), lightness_ran
     Offset can be used to offset the hues.
     overwrite_existing: If True, overwrite existing colors; if False, assign colors only to species without colors.
     """
-
+    #TODO: This only works with a dictionary of schemes. It should work on single schemes too. 
     unique_species = set()
     for scheme in schemes.values():
         unique_species.update(scheme["species"].keys())

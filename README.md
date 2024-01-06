@@ -16,7 +16,7 @@ pip install .
 ## Usage
 Here is a basic example of how to use GeKiM to create and simulate a kinetic model:
 ```python
-from GeKiM import NState
+import gekim
 
 # Define your kinetic scheme in a configuration dictionary
 config = {
@@ -26,17 +26,17 @@ config = {
         "EI": {"conc": 0, "label": "$EI$"},
     },    
     'transitions': {
-        "kon": {"value": 0.0001, "from": ["E","I"], "to": ["EI"]},
-        "koff": {"value": 0.01, "from": ["EI"], "to": ["E","I"]},
+        "kon": {"value": 0.01, "from": ["E","I"], "to": ["EI"]},
+        "koff": {"value": 0.1, "from": ["EI"], "to": ["E","I"]},
     }
 }
 
 # Create a model
-model = NState(config)
+model = gekim.NState(config)
 
 # Define time points and simulate. In this example we're doing a deterministic simulation of the concentrations of each species. 
-time_points = [0, 10, 20, 30] 
-model.solve_ode(time_points)
+t = np.linspace(0.0001, 1000, 1000)
+model,kobs=gekim.utils.solveModel(t,model,"CO")
 
 # Solution will be columned data of concentrations
 print(model.sol)

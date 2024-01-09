@@ -52,20 +52,20 @@ def kinactKIFromkobs(concI, kobs):
     KI_fit, kinact_fit = popt
     return KI_fit, kinact_fit
 
-def solveModel(t,model,occFitType=None):
+def solve_model(t,model,occFitType=None):
     #TODO: change occfittype to be CO=None, TO=None by default. State is specified with species name. Check if fourstate gets same results with TO
     """
     occFitType must be CO or TO for covalent or total occupancy, respectively.
     """
     protein_conc=model.species["E"]["conc"]
     ligand_conc=model.species["I"]["conc"]
-    model.solve_ode(t)
+    model.simulate_deterministic(t)
     if occFitType=="TO":
-        occupancy=np.sum(model.sol[:, 2:], axis=1)
+        occupancy=np.sum(model.traj_deterministic[:, 2:], axis=1)
         kobs,KINum = kobsKIFromTotalOcc(t,occupancy,protein_conc,ligand_conc)
         return model,kobs,KINum
     elif occFitType=="CO":
-        occupancy = model.sol[:,model.species_order["EI"]]
+        occupancy = model.traj_deterministic[:,model.species_order["EI"]]
         kobs = kobsFromOcc(t,occupancy,protein_conc)
         return model,kobs
     elif occFitType is None:
@@ -74,7 +74,7 @@ def solveModel(t,model,occFitType=None):
     else:
         raise ValueError("occFitType must be CO or TO for covalent or total occupancy, respectively.")
 
-def makeIntRates(intOOM,Pf):
+def make_int_rates(intOOM,Pf):
     """
     Provides rates between two states that are at rapid equilibrium and therefore approximated by the population distribution. 
     intOOM is the order of magnitude of the rates.

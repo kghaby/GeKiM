@@ -36,10 +36,10 @@ model = gekim.NState(config)
 
 # Define time points and simulate. In this example we're doing a deterministic simulation of the concentrations of each species. 
 t = np.linspace(0.0001, 1000, 1000)
-model,kobs=gekim.utils.solveModel(t,model,"CO")
+model = model.solve_ode(t)
 
 # Solution will be columned data of concentrations
-print(model.sol)
+print(model.ode_sol)
 ```
 For more detailed examples, please refer to the examples directory.
 

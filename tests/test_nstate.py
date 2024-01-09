@@ -54,11 +54,11 @@ model,kobs=gekim.utils.solveModel(t,model,"CO")
 
 fig = plt.figure(figsize=(5, 3))
 plt.title("3S")
-plt.plot(t, np.sum(model.sol[:, 2:], axis=1),label='All Bound States',color="grey")
+plt.plot(t, np.sum(model.ode_sol[:, 2:], axis=1),label='All Bound States',color="grey")
 for species, props in model.species.items():
     if species == "I":
         continue
-    plt.plot(t, model.sol[:, model.species_order[species]], label=props['label'],color=schemes["3S"]["species"][species]["color"])
+    plt.plot(t, model.ode_sol[:, model.species_order[species]], label=props['label'],color=schemes["3S"]["species"][species]["color"])
 
 plt.plot(t, gekim.utils.occFromKobs(t,kobs,schemes["3S"]["species"]["E"]["conc"]),label=r"$k_{\text{obs}}$ = "+str(gekim.utils.round_sig(kobs,3))+r" $\text{s}^{-1}$",ls='--', color="black")
 

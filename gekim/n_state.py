@@ -33,7 +33,7 @@ class NState:
         #stream_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
         self.logger.addHandler(stream_handler)
 
-        if not self.validate_config(config):
+        if not self._validate_config(config):
             raise ValueError("Invalid config data provided.")
         
         self.config = copy.deepcopy(config)
@@ -45,7 +45,7 @@ class NState:
         
         self.logger.info(f"NState model initialized successfully.")
 
-    def validate_config(self, config):
+    def _validate_config(self, config):
         """
         Validate the provided configuration data.
 
@@ -63,11 +63,11 @@ class NState:
         Preprocess the transitions by extracting coefficients and species names.
         """
         for _, tr in self.transitions.items():
-            tr['from'] = [self.identify_coeff(s) for s in tr['from']]
-            tr['to'] = [self.identify_coeff(s) for s in tr['to']]
+            tr['from'] = [self._identify_coeff(s) for s in tr['from']]
+            tr['to'] = [self._identify_coeff(s) for s in tr['to']]
 
     @staticmethod
-    def identify_coeff(species_str):
+    def _identify_coeff(species_str):
         """
         Extract coefficient and species name from species string.
 
@@ -82,7 +82,7 @@ class NState:
         name = match.groups()[1] if match else species_str
         return coeff, name
 
-    def dcdt(self, t, concentrations):
+    def _dcdt(self, t, concentrations):
         """
         Compute the derivative of concentrations with respect to time.
 
@@ -103,7 +103,7 @@ class NState:
                 dcdt_arr[self.species_order[sp_name]] += coeff * rate
         return dcdt_arr
 
-    def _log_dcdts(self):
+    def log_dcdts(self):
         """
         Log the ordinary differential equations for the concentrations of each species over time in a readable format.
         """
@@ -158,19 +158,19 @@ class NState:
         """
         conc0 = np.array([sp['conc'] for _, sp in self.species.items()])
         t_span = (t[0], t[-1])
-        self._log_dcdts()
+        self.log_dcdts()
         try:
             solution = solve_ivp(
-                lambda t, conc: self.dcdt(t, conc),
+                lambda t, conc: self._dcdt(t, conc),
                 t_span, conc0, t_eval=t, method='BDF', rtol=1e-6, atol=1e-8
             )
             if not solution.success:
                 raise RuntimeError("ODE solver failed: " + solution.message)
-            self.sol = solution.y.T
+            self.ode_sol = solution.y.T
             self.logger.info("ODEs solved successfully.")
         except Exception as e:
             self.logger.error(f"Error in solving ODEs: {e}")
             raise
 
-    def gillespie_sim(self):
+    def _gillespie_sim(self):
         pass  # Gillespie algorithm to be implemented

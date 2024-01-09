@@ -8,7 +8,7 @@ from scipy.integrate import solve_ivp
 class NState:
     #TODO: Add stochastic method
     
-    def __init__(self, config, logfilename=None):
+    def __init__(self, config, logfilename=None, quiet=False):
         """
         Initialize the NState class with configuration data.
 
@@ -22,7 +22,8 @@ class NState:
         """
 
         self.logger = logging.getLogger(__name__)
-        self.logger.setLevel(logging.INFO)
+        if not quiet:
+            self.logger.setLevel(logging.INFO)
 
         if logfilename:
             file_handler = logging.FileHandler(logfilename)
@@ -41,7 +42,7 @@ class NState:
         self.species_order = {name: idx for idx, name in enumerate(self.config['species'])}
         self.transitions = self.config['transitions']
         self._preprocess_transitions()
-        self.sol = None
+        self.traj_deterministic = None
         
         self.logger.info(f"NState model initialized successfully.")
 
@@ -146,12 +147,13 @@ class NState:
 
         self.logger.info(ode_log)
 
-    def solve_ode(self, t):
+    def simulate_deterministic(self, t, method='BDF'):
         """
         Solve the ordinary differential equations for the system.
 
         Parameters:
         t (list or numpy.ndarray): Time points to solve the ODEs at.
+        method: integration method. Default is BDF.
 
         Raises:
         RuntimeError: If the ODE solver fails.
@@ -162,11 +164,11 @@ class NState:
         try:
             solution = solve_ivp(
                 lambda t, conc: self._dcdt(t, conc),
-                t_span, conc0, t_eval=t, method='BDF', rtol=1e-6, atol=1e-8
+                t_span, conc0, t_eval=t, method=method, rtol=1e-6, atol=1e-8
             )
             if not solution.success:
                 raise RuntimeError("ODE solver failed: " + solution.message)
-            self.ode_sol = solution.y.T
+            self.traj_deterministic = solution.y.T
             self.logger.info("ODEs solved successfully.")
         except Exception as e:
             self.logger.error(f"Error in solving ODEs: {e}")

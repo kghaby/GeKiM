@@ -47,23 +47,9 @@ schemes["3Scoeff2"] = {
 }
 schemes=gekim.utils.assign_colors_to_species(schemes,saturation_range=(0.5,0.8),lightness_range=(0.4,0.5),overwrite_existing=False)
 
-t = np.linspace(0.0001, 10000, 10000)
+t = np.linspace(0.0001, 10000, 3)
 
-model = gekim.NState(schemes["3S"])
-model,kobs=gekim.utils.solve_model(t,model,"CO")
-
-fig = plt.figure(figsize=(5, 3))
-plt.title("3S")
-plt.plot(t, np.sum(model.traj_deterministic[:, 2:], axis=1),label='All Bound States',color="grey")
-for species, props in model.species.items():
-    if species == "I":
-        continue
-    plt.plot(t, model.traj_deterministic[:, model.species_order[species]], label=props['label'],color=schemes["3S"]["species"][species]["color"])
-
-plt.plot(t, gekim.utils.occFromKobs(t,kobs,schemes["3S"]["species"]["E"]["conc"]),label=r"$k_{\text{obs}}$ = "+str(gekim.utils.round_sig(kobs,3))+r" $\text{s}^{-1}$",ls='--', color="black")
-
-plt.xlabel('Time (s)')
-plt.ylabel('Concentration (nM)')
-plt.legend(frameon=False)
-
-plt.show()
+model = gekim.NState(schemes["3S"],quiet=True)
+model.simulate_deterministic(t)
+print(model.traj_deterministic)
+#model,kobs=gekim.utils.solve_model(t,model,"CO")

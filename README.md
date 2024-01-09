@@ -6,7 +6,12 @@ GeKiM (Generalized Kinetic Modeler) is a Python package designed for creating, i
 The package also contains classes for common schemes, which come with scheme-specific analyses and metrics (e.g., ThreeState.KI, AXD.jacobian).
 
 ## Installation
-For now, you can only install GeKiM directly from the source code:
+With pip:
+```bash
+pip install gekim
+```
+
+Or directly from the source code:
 ```bash
 git clone https://github.com/kghaby/GeKiM.git
 cd GeKiM
@@ -35,11 +40,11 @@ config = {
 model = gekim.NState(config)
 
 # Define time points and simulate. In this example we're doing a deterministic simulation of the concentrations of each species. 
-t = np.linspace(0.0001, 1000, 1000)
-model = model.solve_ode(t)
+t = np.linspace(0.0001, 1000, 10)
+model.simulate_deterministic(t)
 
 # Solution will be columned data of concentrations
-print(model.ode_sol)
+print(model.traj_deterministic)
 ```
 For more detailed examples, please refer to the examples directory.
 

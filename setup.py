@@ -20,7 +20,6 @@ setup(
         'Intended Audience :: Science/Research',
         'Topic :: Scientific/Engineering :: Chemistry',
         'License :: OSI Approved :: GNU General Public License (GPL)',
-        'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.8',
     ],
     python_requires='>=3.8', 

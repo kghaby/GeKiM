@@ -1,6 +1,8 @@
 import gekim
 import numpy as np
 import matplotlib.pyplot as plt
+import sys 
+from pympler import asizeof
 
 schemes={}
 schemes["3S"] = {
@@ -49,7 +51,15 @@ schemes=gekim.utils.assign_colors_to_species(schemes,saturation_range=(0.5,0.8),
 
 t = np.linspace(0.0001, 10000, 3)
 
-model = gekim.NState(schemes["3S"],quiet=True)
+#model = gekim.NState(schemes["3S"],quiet=True)
+model = gekim.NState(schemes["3Scoeff1"],quiet=False)
 model.simulate_deterministic(t)
-print(model.traj_deterministic)
-#model,kobs=gekim.utils.solve_model(t,model,"CO")
+#print(model.traj_deterministic)
+kobs=gekim.utils.fit_occupancy(t,model,"CO")
+print(kobs)
+
+size = asizeof.asizeof(model)
+print(f"Total memory used by NState instance: {round(size/1024)} KB")
+
+size = sys.getsizeof(model.traj_deterministic)
+print(f"Size of traj: {size} bytes.")

@@ -52,25 +52,25 @@ def kinactKIFromkobs(concI, kobs):
     KI_fit, kinact_fit = popt
     return KI_fit, kinact_fit
 
-def solve_model(t,model,occFitType=None):
+def fit_occupancy(t,model,occFitType=None):
     #TODO: change occfittype to be CO=None, TO=None by default. State is specified with species name. Check if fourstate gets same results with TO
+    #TODO: make it not reliant on deterministic results
     """
     occFitType must be CO or TO for covalent or total occupancy, respectively.
     """
     protein_conc=model.species["E"]["conc"]
     ligand_conc=model.species["I"]["conc"]
-    model.simulate_deterministic(t)
     if occFitType=="TO":
         occupancy=np.sum(model.traj_deterministic[:, 2:], axis=1)
         kobs,KINum = kobsKIFromTotalOcc(t,occupancy,protein_conc,ligand_conc)
-        return model,kobs,KINum
+        return kobs,KINum
     elif occFitType=="CO":
         occupancy = model.traj_deterministic[:,model.species_order["EI"]]
         kobs = kobsFromOcc(t,occupancy,protein_conc)
-        return model,kobs
+        return kobs
     elif occFitType is None:
         kobs = None
-        return model,kobs
+        return kobs
     else:
         raise ValueError("occFitType must be CO or TO for covalent or total occupancy, respectively.")
 

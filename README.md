@@ -45,6 +45,10 @@ model.simulate_deterministic(t)
 
 # Solution will be columned data of concentrations
 print(model.traj_deterministic)
+
+# Find the rate of Covalent Occupancy for the 
+kobs=gekim.utils.fit_occupancy(t,model,"CO")
+print(kobs)
 ```
 For more detailed examples, please refer to the examples directory.
 
@@ -59,3 +63,5 @@ GeKiM is licensed under the GPL-3.0 license.
 
 ## Contact
 kyleghaby@gmail.com
+
+## TODO

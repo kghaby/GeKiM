@@ -50,7 +50,8 @@ schemes=gekim.utils.assign_colors_to_species(schemes,saturation_range=(0.5,0.8),
 t = np.linspace(0.0001, 10000, 10000)
 
 model = gekim.NState(schemes["3S"])
-model,kobs=gekim.utils.solve_model(t,model,"CO")
+model.simulate_deterministic(t)
+kobs=gekim.utils.fit_occupancy(t,model,"CO")
 
 fig = plt.figure(figsize=(5, 3))
 plt.title("3S")

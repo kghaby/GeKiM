@@ -51,7 +51,7 @@ t = np.linspace(0.0001, 10000, 10000)
 
 model = gekim.NState(schemes["3S"])
 model.simulate_deterministic(t)
-kobs=gekim.utils.fit_occupancy(t,model,"CO")
+kobs=gekim.utils.fit_occupancy(t,model,occ_fit_type="CO")
 
 fig = plt.figure(figsize=(5, 3))
 plt.title("3S")

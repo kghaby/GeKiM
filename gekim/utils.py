@@ -52,27 +52,27 @@ def kinactKIFromkobs(concI, kobs):
     KI_fit, kinact_fit = popt
     return KI_fit, kinact_fit
 
-def fit_occupancy(t,model,occFitType=None):
-    #TODO: change occfittype to be CO=None, TO=None by default. State is specified with species name. Check if fourstate gets same results with TO
+def fit_occupancy(t,model,occ_fit_type=None):
+    #TODO: change occ_fit_type to be CO=None, TO=None by default. State is specified with species name. Check if fourstate gets same results with TO
     #TODO: make it not reliant on deterministic results
     """
-    occFitType must be CO or TO for covalent or total occupancy, respectively.
+    occ_fit_type must be CO or TO for covalent or total occupancy, respectively.
     """
     protein_conc=model.species["E"]["conc"]
     ligand_conc=model.species["I"]["conc"]
-    if occFitType=="TO":
+    if occ_fit_type=="TO":
         occupancy=np.sum(model.traj_deterministic[:, 2:], axis=1)
         kobs,KINum = kobsKIFromTotalOcc(t,occupancy,protein_conc,ligand_conc)
         return kobs,KINum
-    elif occFitType=="CO":
+    elif occ_fit_type=="CO":
         occupancy = model.traj_deterministic[:,model.species_order["EI"]]
         kobs = kobsFromOcc(t,occupancy,protein_conc)
         return kobs
-    elif occFitType is None:
+    elif occ_fit_type is None:
         kobs = None
         return kobs
     else:
-        raise ValueError("occFitType must be CO or TO for covalent or total occupancy, respectively.")
+        raise ValueError("occ_fit_type must be CO or TO for covalent or total occupancy, respectively.")
 
 def make_int_rates(intOOM,Pf):
     """

@@ -55,7 +55,7 @@ t = np.linspace(0.0001, 10000, 3)
 model = gekim.NState(schemes["3Scoeff1"],quiet=False)
 model.simulate_deterministic(t)
 #print(model.traj_deterministic)
-kobs=gekim.utils.fit_occupancy(t,model,"CO")
+kobs=gekim.utils.fit_occupancy(t,model,occ_fit_type="CO")
 print(kobs)
 
 size = asizeof.asizeof(model)

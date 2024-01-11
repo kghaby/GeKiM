@@ -20,9 +20,11 @@ class NState:
         Raises:
         ValueError: If config is invalid.
         """
-
         self.logger = logging.getLogger(__name__)
-        if not quiet:
+        self.logger.handlers = []
+        if quiet:
+            self.logger.setLevel(logging.WARNING)
+        else:
             self.logger.setLevel(logging.INFO)
 
         if logfilename:
@@ -113,12 +115,12 @@ class NState:
 
         # Find the max length for the headers
         for sp_name in self.species:
-            header_length = len(f"d{sp_name}/dt")
+            header_length = len(f"d[{sp_name}]/dt")
             max_header_length = max(max_header_length, header_length)
 
         # Write eqn headers and rate laws
         for sp_name in self.species:
-            dcdt_dict[sp_name] = [f"d{sp_name}/dt".ljust(max_header_length) + " ="]
+            dcdt_dict[sp_name] = [f"d[{sp_name}]/dt".ljust(max_header_length) + " ="]
 
         for tr_name, tr in self.transitions.items():
             # Write rate law

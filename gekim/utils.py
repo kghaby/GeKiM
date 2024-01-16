@@ -74,6 +74,57 @@ def fit_occupancy(t,model,occ_fit_type=None):
     else:
         raise ValueError("occ_fit_type must be CO or TO for covalent or total occupancy, respectively.")
 
+def occ_from_kobs_complex(t, kobs, conc_0E, k_start, t_half, fraction_state):
+    """
+    Fitting function for covalent inhibition with a startup phase and a side reaction pathway.
+    
+    :param t: Time points
+    :param conc_0E: Initial concentration of E
+    :param k_start: Rate constant for the startup phase
+    :param t_half: Time to half-maximum in the sigmoidal function
+    :param kobs: Observed rate constant 
+    :param fraction_state: Fraction of E that will eventually convert to the state
+    :return: Concentration of state at each time point
+    """
+    return conc_0E * 1 / (1 + np.exp(-k_start * (t - t_half))) * (1 - np.exp(-kobs * t)) * fraction_state
+
+def kobs_from_occ_complex(t, occupancy, conc0E): 
+    """
+    Function to fit k_start, t_half, kobs, and fraction_state based on occupancy and conc0E.
+
+    :param t: Time points
+    :param occupancy: Measured occupancy data
+    :param conc0E: Initial concentration of E
+    :return: Fitted values of kobs,k_start,t_half,fraction_state
+    """
+    func = lambda t, kobs, k_start, t_half, fraction_state: occ_from_kobs_complex(t, kobs, conc0E, k_start, t_half, fraction_state)
+    initial_guesses = [0.01, min(t) + 0.1 * (max(t) - min(t)), 0.01, 0.999]  # k_start, t_half, kobs, fraction_state
+    popt, _ = curve_fit(func, t, occupancy, p0=initial_guesses, bounds=(0, np.inf))  # Non-negative bounds
+    kobs,k_start,t_half,fraction_state = popt
+    return kobs,k_start,t_half,fraction_state 
+
+def fit_occupancy_complex(t,model,occ_fit_type=None):
+    #TODO: change occ_fit_type to be CO=None, TO=None by default. State is specified with species name. Check if fourstate gets same results with TO
+    #TODO: make it not reliant on deterministic results
+    """
+    occ_fit_type must be CO or TO for covalent or total occupancy, respectively.
+    """
+    protein_conc=model.species["E"]["conc"]
+    ligand_conc=model.species["I"]["conc"]
+    if occ_fit_type=="TO":
+        occupancy=np.sum(model.traj_deterministic[:, 2:], axis=1)
+        kobs,KINum = kobsKIFromTotalOcc(t,occupancy,protein_conc,ligand_conc)
+        return kobs,KINum
+    elif occ_fit_type=="CO":
+        occupancy = model.traj_deterministic[:,model.species_order["EI"]]
+        kobs,k_start,t_half,fraction_state = kobs_from_occ_complex(t,occupancy,protein_conc)
+        return kobs,k_start,t_half,fraction_state 
+    elif occ_fit_type is None:
+        kobs = None
+        return kobs
+    else:
+        raise ValueError("occ_fit_type must be CO or TO for covalent or total occupancy, respectively.")
+
 def make_int_rates(intOOM,Pf):
     """
     Provides rates between two states that are at rapid equilibrium and therefore approximated by the population distribution. 

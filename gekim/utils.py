@@ -11,8 +11,11 @@ def totalOccFromKobsKI(t,kobs,conc0E,conc0I,KI): #eq 1
 def occFromKobs(t,kobs,conc0E): #eq 1, scales from initial conc of enzyme
     return conc0E*(1-np.e**(-kobs*t)) #returned as a fraction
 
-def kobsFromConcI(KI,kinact,concI): #eq 2
+def kobs_from_concI_monod(KI,kinact,concI): 
     return (kinact*concI)/(KI+concI)
+
+def kobs_from_concI_hill(KI_app,kinact,concI,n): 
+    return (kinact*concI**n)/(KI_app**n+concI**n)
 
 def occFromPop(sol):
     freeP = sol[:, 1]  # Free protein column
@@ -45,12 +48,19 @@ def kobsFromOcc(t, occupancy, conc0E):
     return kobs
 
 
-def kinactKIFromkobs(concI, kobs):
+def kinact_KI_from_kobs(concI, kobs):
     def model_func(I, KI, kinact):
         return (kinact * I) / (KI + I)
-    popt, _ = curve_fit(model_func, concI, kobs, p0=[1000, 0.001], bounds=(0, np.inf))
+    popt, _ = curve_fit(model_func, concI, kobs, p0=[100,0.01], bounds=(0, np.inf))
     KI_fit, kinact_fit = popt
     return KI_fit, kinact_fit
+
+def kinact_KIapp_n_from_kobs(concI, kobs):
+    def model_func(I, KI_app, kinact,n):
+        return (kinact * I**n) / (KI_app**n + I**n)
+    popt, _ = curve_fit(model_func, concI, kobs, p0=[100,0.01,1], bounds=(0, np.inf))
+    KIapp_fit, kinact_fit, n_fit = popt
+    return KIapp_fit, kinact_fit, n_fit
 
 def fit_occupancy(t,model,occ_fit_type=None):
     #TODO: change occ_fit_type to be CO=None, TO=None by default. State is specified with species name. Check if fourstate gets same results with TO
@@ -124,6 +134,54 @@ def fit_occupancy_complex(t,model,occ_fit_type=None):
         return kobs
     else:
         raise ValueError("occ_fit_type must be CO or TO for covalent or total occupancy, respectively.")
+
+def fit_occupancy_scaled(t,model,occ_fit_type=None):
+    #TODO: TO is wrong. combine with other fitting funcs
+    """
+    occ_fit_type must be CO or TO for covalent or total occupancy, respectively.
+    """
+    protein_conc=model.species["E"]["conc"]
+    ligand_conc=model.species["I"]["conc"]
+    if occ_fit_type=="TO":
+        occupancy=np.sum(model.traj_deterministic[:, 2:], axis=1)
+        kobs,KINum = kobsKIFromTotalOcc(t,occupancy,protein_conc,ligand_conc)
+        return kobs,KINum
+    elif occ_fit_type=="CO":
+        occupancy = model.traj_deterministic[:,model.species_order["EI"]]
+        kobs,fraction_state = kobs_from_occ_scaled(t,occupancy,protein_conc)
+        return kobs,fraction_state 
+    elif occ_fit_type is None:
+        kobs = None
+        return kobs
+    else:
+        raise ValueError("occ_fit_type must be CO or TO for covalent or total occupancy, respectively.")
+    
+def occ_from_kobs_scaled(t, kobs, conc_0E, fraction_state):
+    """
+    Fitting function for covalent inhibition with a startup phase and a side reaction pathway.
+    
+    :param t: Time points
+    :param conc_0E: Initial concentration of E
+    :param kobs: Observed rate constant 
+    :param fraction_state: Fraction of E that will eventually convert to the state
+    :return: Concentration of state at each time point
+    """
+    return conc_0E * (1 - np.exp(-kobs * t)) * fraction_state
+
+def kobs_from_occ_scaled(t, occupancy, conc0E): 
+    """
+    Function to fit kobs and fraction_state based on occupancy and conc0E.
+
+    :param t: Time points
+    :param occupancy: Measured occupancy data
+    :param conc0E: Initial concentration of E
+    :return: Fitted values of kobs,fraction_state
+    """
+    func = lambda t, kobs,fraction_state: occ_from_kobs_scaled(t, kobs, conc0E, fraction_state)
+    initial_guesses = [0.01, 0.999]  #kobs, fraction_state
+    popt, _ = curve_fit(func, t, occupancy, p0=initial_guesses, bounds=(0, np.inf))  # Non-negative bounds
+    kobs,fraction_state = popt
+    return kobs,fraction_state 
 
 def make_int_rates(intOOM,Pf):
     """

@@ -87,12 +87,13 @@ class CovalentInhibition:
         Args:
             t: Array of timepoints.
             occ_tot: Array of total occupancy.
-            params (dict, optional): A structured dictionary of parameters with 'fixed','guess', and 'bound' keys. Include any params to update the default.
-                default_params = {
-                    "KI": {"fix": None, "guess": 100, "bounds": (0,np.inf)},
-                    "kinact": {"fix": None, "guess": 0.01, "bounds": (0,np.inf)},
-                    "n": {"fix": 1, "guess": 1, "bounds": (-np.inf,np.inf)}, 
-                }
+            params = {
+                "kobs": {"fix": None, "guess": 0.01, "bounds": (0,np.inf)},
+                "concI0": {"fix": None, "guess": 100, "bounds": (0,np.inf)},
+                "KI": {"fix": None, "guess": 10, "bounds": (0,np.inf)},
+                "Etot": {"fix": None, "guess": 1, "bounds": (0,np.inf)},
+                "frac_Eavail": {"fix": None, "guess": 1, "bounds": (0,1)}, 
+            }
 
         Returns:
             dict: Dictionary of fitted params in order, covariance, fitted data, and reduced chi squared.

@@ -37,7 +37,7 @@ config = {
 }
 
 # Create a model
-model = gekim.NState(config)
+model = gekim.scheme.NState(config)
 
 # Define time points and simulate. In this example we're doing a deterministic simulation of the concentrations of each species. 
 t = np.linspace(0.0001, 1000, 10)
@@ -46,8 +46,9 @@ model.simulate_deterministic(t)
 # Solution will be columned data of concentrations
 print(model.traj_deterministic)
 
-# Find the rate of Covalent Occupancy for the 
-kobs=gekim.utils.fit_occupancy(t,model,"CO")
+# Find the observed rate of occupancy 
+occupancy = model.traj_deterministic[:,model.species_order["EI"]]
+kobs = gekim.analysis.CovalentInhibition.kobs_fit_to_occ_final_wrt_t(t,occupancy)
 print(kobs)
 ```
 For more detailed examples, please refer to the examples directory.

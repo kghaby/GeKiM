@@ -3,13 +3,13 @@ import numpy as np
 import math
 import colorsys
 
-def totalOccFromKobsKI(t,kobs,conc0E,conc0I,KI): #eq 1
-    Y0=conc0E/(1+(KI/conc0I))
-    Ymax=conc0E-Y0
+def totalOccFromKobsKI(t,kobs,concE0,concI0,KI): #eq 1
+    Y0=concE0/(1+(KI/concI0))
+    Ymax=concE0-Y0
     return Ymax*(1-np.e**(-kobs*t))+Y0 #returned as a fraction
 
-def occFromKobs(t,kobs,conc0E): #eq 1, scales from initial conc of enzyme
-    return conc0E*(1-np.e**(-kobs*t)) #returned as a fraction
+def occFromKobs(t,kobs,concE0): #eq 1, scales from initial conc of enzyme
+    return concE0*(1-np.e**(-kobs*t)) #returned as a fraction
 
 def kobs_from_concI_monod(KI,kinact,concI): 
     return (kinact*concI)/(KI+concI)
@@ -108,7 +108,7 @@ def kobs_from_occ_complex(t, occupancy, conc0E):
     :return: Fitted values of kobs,k_start,t_half,fraction_state
     """
     func = lambda t, kobs, k_start, t_half, fraction_state: occ_from_kobs_complex(t, kobs, conc0E, k_start, t_half, fraction_state)
-    initial_guesses = [0.01, min(t) + 0.1 * (max(t) - min(t)), 0.01, 0.999]  # k_start, t_half, kobs, fraction_state
+    initial_guesses = [0.01, 0.01, min(t) + 0.1 * (max(t) - min(t)), 0.999]  # kobs, k_start, t_half, fraction_state
     popt, _ = curve_fit(func, t, occupancy, p0=initial_guesses, bounds=(0, np.inf))  # Non-negative bounds
     kobs,k_start,t_half,fraction_state = popt
     return kobs,k_start,t_half,fraction_state 
@@ -129,6 +129,38 @@ def fit_occupancy_complex(t,model,occ_fit_type=None):
         occupancy = model.traj_deterministic[:,model.species_order["EI"]]
         kobs,k_start,t_half,fraction_state = kobs_from_occ_complex(t,occupancy,protein_conc)
         return kobs,k_start,t_half,fraction_state 
+    elif occ_fit_type is None:
+        kobs = None
+        return kobs
+    else:
+        raise ValueError("occ_fit_type must be CO or TO for covalent or total occupancy, respectively.")
+
+def occ_from_kobs_complex2(t, kobs, conc_0E, t_half, fraction_state):
+    return conc_0E * (1 - np.exp(-kobs * (t-t_half))) * fraction_state
+
+def kobs_from_occ_complex2(t, occupancy, conc0E): 
+    func = lambda t, kobs, t_half, fraction_state: occ_from_kobs_complex2(t, kobs, conc0E, t_half, fraction_state)
+    initial_guesses = [0.01, min(t) + 0.1 * (max(t) - min(t)), 0.999]  # kobs, t_half, fraction_state
+    popt, _ = curve_fit(func, t, occupancy, p0=initial_guesses, bounds=(0, np.inf))  # Non-negative bounds
+    kobs,t_half,fraction_state = popt
+    return kobs,t_half,fraction_state 
+
+def fit_occupancy_complex2(t,model,occ_fit_type=None):
+    #TODO: change occ_fit_type to be CO=None, TO=None by default. State is specified with species name. Check if fourstate gets same results with TO
+    #TODO: make it not reliant on deterministic results
+    """
+    occ_fit_type must be CO or TO for covalent or total occupancy, respectively.
+    """
+    protein_conc=model.species["E"]["conc"]
+    ligand_conc=model.species["I"]["conc"]
+    if occ_fit_type=="TO":
+        occupancy=np.sum(model.traj_deterministic[:, 2:], axis=1)
+        kobs,KINum = kobsKIFromTotalOcc(t,occupancy,protein_conc,ligand_conc)
+        return kobs,KINum
+    elif occ_fit_type=="CO":
+        occupancy = model.traj_deterministic[:,model.species_order["EI"]]
+        kobs,t_half,fraction_state = kobs_from_occ_complex2(t,occupancy,protein_conc)
+        return kobs,t_half,fraction_state 
     elif occ_fit_type is None:
         kobs = None
         return kobs
@@ -183,6 +215,24 @@ def kobs_from_occ_scaled(t, occupancy, conc0E):
     kobs,fraction_state = popt
     return kobs,fraction_state 
 
+
+class calc:
+    """
+    Contains useful equations. 
+    """
+    @staticmethod
+    def rate_pair(intOOM,Pf):
+        """
+        Provides rates between two states that are at rapid equilibrium and therefore approximated by the population distribution. 
+        intOOM is the order of magnitude of the rates.
+        Pf is the proportion of the forward state, ie kf/(kf+kb) or [B]/([A]+[B]) for A<-->B.
+        """
+        kf=Pf*10**(float(intOOM)+1)
+        kb=10**(float(intOOM)+1)-kf
+        return kf,kb
+
+
+
 def make_int_rates(intOOM,Pf):
     """
     Provides rates between two states that are at rapid equilibrium and therefore approximated by the population distribution. 
@@ -223,7 +273,7 @@ def assign_colors_to_species(schemes, saturation_range=(0.5, 0.7), lightness_ran
     Offset can be used to offset the hues.
     overwrite_existing: If True, overwrite existing colors; if False, assign colors only to species without colors.
     """
-    #TODO: This only works with a dictionary of schemes. It should work on single schemes too. 
+    #TODO: This only works with a dictionary of schemes. It should work on single schemes too
     unique_species = set()
     for scheme in schemes.values():
         unique_species.update(scheme["species"].keys())
@@ -237,7 +287,7 @@ def assign_colors_to_species(schemes, saturation_range=(0.5, 0.7), lightness_ran
 
     for i, species in enumerate(unique_species):
         # Skip species with existing color unless overwriting
-        if not overwrite_existing and "color" in scheme["species"][species]:
+        if not overwrite_existing and (species in scheme["species"] and "color" in scheme["species"][species]):
             continue
 
         if method == "GR":
@@ -258,3 +308,82 @@ def assign_colors_to_species(schemes, saturation_range=(0.5, 0.7), lightness_ran
                 scheme["species"][species]["color"] = color_mapping.get(species, scheme["species"][species].get("color"))
 
     return schemes
+
+def _update_dict_with_subset(defaults: dict, updates: dict):
+    """
+    Recursively updates the default dictionary with values from the update dictionary,
+    ensuring that only the keys present in the defaults are updated.
+
+    Args:
+        defaults: The default dictionary containing all allowed keys with their default values.
+        updates: The update dictionary containing keys to update in the defaults dictionary.
+
+    Returns:
+        dict: The updated dictionary.
+    """
+
+    for key, update_value in updates.items():
+        if key in defaults:
+            # If both the default and update values are dictionaries, recurse
+            if isinstance(defaults[key], dict) and isinstance(update_value, dict):
+                defaults[key] = _update_dict_with_subset(defaults[key], update_value)
+            else:
+                defaults[key] = update_value
+
+    return defaults
+
+class Fitting:
+    @staticmethod
+    def chi_squared(observed_data, fitted_data, fitted_params, variances=None, reduced=False):
+        """
+        Calculate the chi-squared and optionally the reduced chi-squared statistics.
+
+        Args:
+            observed_data (np.ndarray): The observed data points.
+            fitted_data (np.ndarray): The fitted data points obtained from curve fitting.
+            fitted_params (list or np.ndarray): The optimal parameters obtained from curve fitting.
+            variances (np.ndarray, optional): Variances of the observed data points. If None, assume constant variance.
+            reduced (bool, optional): If True, calculate and return the reduced chi-squared.
+
+        Returns:
+            float: The chi-squared or reduced chi-squared statistic.
+        """
+
+        if len(observed_data) != len(fitted_data):
+            raise ValueError("Length of observed_data and fitted_data must be the same.")
+
+        if len(fitted_params) == 0:
+            raise ValueError("fitted_params cannot be empty.")
+
+        residuals = observed_data - fitted_data
+        chi_squared = np.sum((residuals**2) / variances) if variances is not None else np.sum(residuals**2)
+
+        if reduced:
+            degrees_of_freedom = len(observed_data) - len(fitted_params)
+            if degrees_of_freedom <= 0:
+                raise ValueError("Degrees of freedom must be positive.")
+            return chi_squared / degrees_of_freedom
+
+        return chi_squared
+
+    @staticmethod
+    def extract_fit_info(params):
+        """Extracts initial guesses, bounds, and segregates fixed and fitted parameters."""
+        p0, bounds, param_order = [], ([], []), []
+        fixed_params = {}
+        for param, config in params.items():
+            if config["fix"] is not None:
+                fixed_params[param] = config["fix"]
+            else:
+                p0.append(config["guess"])
+                bounds[0].append(config["bounds"][0])
+                bounds[1].append(config["bounds"][1])
+                param_order.append(param)
+        return p0, bounds, param_order, fixed_params
+
+    @staticmethod
+    def prepare_output(popt, pcov, param_order, fitted_data, observed_data):
+        """Prepare the fitting output dictionary."""
+        fit_output = {"fitted_params": dict(zip(param_order, popt)), "pcov": pcov, "fitted_data": fitted_data}
+        fit_output["reduced_chi_sq"] = Fitting.chi_squared(observed_data, fitted_data, popt, np.var(observed_data), reduced=True)
+        return fit_output

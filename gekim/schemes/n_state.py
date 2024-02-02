@@ -177,4 +177,5 @@ class NState:
             raise
 
     def _gillespie_sim(self):
-        pass  # Gillespie algorithm to be implemented
+        raise NotImplementedError("TODO: Gillespie alg")
+        

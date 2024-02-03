@@ -6,6 +6,20 @@ import sys
 from scipy.integrate import solve_ivp
 
 class NState:
+    #TODO: Make sure its all np arrays and not lists 
+    #TODO: Add traj attr to species that points to the traj object output from a traj. could have attr's for deterministic or stochastic. have a sum method like below in a traj attr under NState:
+    def sum_concentrations(NState,whitelist:list=None,blacklist:list=None):
+        """
+        Sum the concentrations of species in an NState model.
+        """
+        if not whitelist and not blacklist:
+            raise ValueError("Cannot provide both a whitelist and blacklist.")
+        if not whitelist:
+            return sum([NState.concentrations[NState.species_order[species]] for species in whitelist])
+        elif not blacklist:
+            return sum([NState.concentrations[NState.species_order[species]] for species in NState.species if species not in blacklist])
+        else:
+            return sum(NState.concentrations)
     #TODO: Add stochastic method
     
     def __init__(self, config, logfilename=None, quiet=False):
@@ -160,7 +174,7 @@ class NState:
         Raises:
         RuntimeError: If the ODE solver fails.
         """
-        conc0 = np.array([sp['conc'] for _, sp in self.species.items()])
+        conc0 = np.array([sp["conc0"] for _, sp in self.species.items()])
         t_span = (t[0], t[-1])
         self.log_dcdts()
         try:

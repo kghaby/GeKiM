@@ -1,7 +1,9 @@
 
 __author__ = "Kyle Ghaby"
 
-__all__ = ['CovalentInhibition']
+__all__ = ["covalent_inhibition", "binding", "chi_squared"]
 
-from .covalent_inhibition import CovalentInhibition
+from . import covalent_inhibition
+from . import binding
+from .fitting import chi_squared
 

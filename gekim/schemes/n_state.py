@@ -5,17 +5,6 @@ import logging
 import sys
 from scipy.integrate import solve_ivp
 
-class _Species:
-    def __init__(self, name, species_data:dict):
-        self.name = name
-        self.concentration = species_data.get('conc')
-        self.index = species_data.get('index')
-        self.label = species_data.get('label', self.name)
-        self.color = species_data.get('color')
-
-
-
-
 class NState:
     #TODO: Make sure its all np arrays and not lists 
     #TODO: Add stochastic method
@@ -89,7 +78,7 @@ class NState:
         labels = set()
         for name, data in self.species.items():
             # Validate labels
-            label = data.get('label')
+            label = data.get('label',name)
             if label in labels:
                 self.logger.error(f"Duplicate label '{label}' found for species '{name}'.")
                 return False

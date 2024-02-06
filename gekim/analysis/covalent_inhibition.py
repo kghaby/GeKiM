@@ -216,26 +216,5 @@ class Experiments:
     Common place for experimental setups in covalent inhibition literature.
     """
     @staticmethod
-    def timecourse(kobs,concI0,KI,kinact,Etot,fracEavail=1,tmax=1000,n=100):
-        """
-        Simulate a timecourse experiment for covalent inhibition.
-
-        Args:
-            kobs: Observed rate constant.
-            concI0: Initial concentration of the (saturating) inhibitor.
-            KI: Inhibition constant, where kobs = kinact/2, analogous to K_M, K_D, and K_A. Must be in the same units as concI0.
-            kinact: Maximum potential rate of covalent bond formation.
-            Etot: Total concentration of E across all species.
-            fracEavail: Fraction of available E. Default=1, ie all E is avail
-            tmax: Maximum time to simulate.
-            n: Number of timepoints to simulate.
-
-        Returns:
-            np.array: Timepoints.
-            np.array: Occupancy of final occupancy (Occ_cov).
-            np.array: Occupancy of total occupancy (Occ_tot).
-        """
-        t = np.linspace(0,tmax,n)
-        Occ_cov = occ_final_wrt_t(t,kobs,Etot,fracEavail)
-        Occ_tot = occ_total_wrt_t(t,kobs,concI0,KI,Etot,fracEavail)
-        return t, Occ_cov, Occ_tot
+    def timecourse(t,system):
+        return NotImplementedError()

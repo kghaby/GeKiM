@@ -47,7 +47,7 @@ model.simulate_deterministic(t)
 print(model.traj_deterministic)
 
 # Find the observed rate of occupancy 
-occupancy = model.traj_deterministic[:,model.species_order["EI"]]
+occupancy = model.traj_deterministic[:,model.species["EI"]['index']]
 kobs = gekim.analysis.CovalentInhibition.kobs_fit_to_occ_final_wrt_t(t,occupancy)
 print(kobs)
 ```

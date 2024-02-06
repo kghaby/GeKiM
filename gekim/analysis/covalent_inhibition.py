@@ -13,11 +13,11 @@ def occ_final_wrt_t(t,kobs,Etot,fracEavail=1):
         fracEavail: Fraction of available E. Default=1, ie all E is avail
 
     Returns:
-        np.ndarray: Occupancy of final occupancy (Occ_cov).
+        np.array: Occupancy of final occupancy (Occ_cov).
     '''
     return fracEavail*Etot*(1-np.e**(-kobs*t))
 
-def kobs_fracEavail_fit_to_occ_final_wrt_t(t: np.ndarray, occ_final: np.ndarray, nondefault_params: dict = None): 
+def kobs_fracEavail_fit_to_occ_final_wrt_t(t: np.array, occ_final: np.array, nondefault_params: dict = None): 
     '''
     Fit kobs to the first order occupancy over time.
 
@@ -36,7 +36,7 @@ def kobs_fracEavail_fit_to_occ_final_wrt_t(t: np.ndarray, occ_final: np.ndarray,
     
     Example:
         ```python
-        fit_output =  ci.kobs_fracEavail_fit_to_occ_final_wrt_t(t,model.traj_deterministic[:,model.species_order["EI"]],nondefault_params={"Etot":{"fix":concE0}})
+        fit_output =  ci.kobs_fracEavail_fit_to_occ_final_wrt_t(t,system.traj_deterministic[:,system.species["EI"]['index']],nondefault_params={"Etot":{"fix":concE0}})
         ```
         Will fit kobs and fracEavail to the concentration of EI over time, fixing Etot at concE0.
     '''
@@ -75,13 +75,13 @@ def occ_total_wrt_t(t,kobs,concI0,KI,Etot,fracEavail=1):
         fracEavail: Fraction of available E. Default=1, ie all E is avail
     
     Returns:
-        np.ndarray: Occupancy of total occupancy (Occ_tot).
+        np.array: Occupancy of total occupancy (Occ_tot).
     '''
 
     FO = 1/(1+(KI/concI0)) # Equilibrium occupancy of reversible portion
     return fracEavail*Etot*(1-(1-FO)*(np.e**(-kobs*t)))
 
-def kobs_KI_fracEavail_fit_to_occ_total_wrt_t(t: np.ndarray, occ_tot: np.ndarray, nondefault_params: dict = None): 
+def kobs_KI_fracEavail_fit_to_occ_total_wrt_t(t: np.array, occ_tot: np.array, nondefault_params: dict = None): 
     '''
     Fit kobs and KI to the total occupancy of all bound states over time, assuming fast reversible binding equilibrated at t=0.
 
@@ -134,11 +134,11 @@ def kobs_wrt_concI0(concI0,KI,kinact,n=1):
         n (Optional): Hill coefficient, default is 1.
 
     Returns:
-        np.ndarray: Array of kobs values, the first order observed rate constants of inactivation, with units of inverse time.
+        np.array: Array of kobs values, the first order observed rate constants of inactivation, with units of inverse time.
     '''
     return kinact/(1+(KI/concI0)**n)
 
-def KI_kinact_n_fit_to_kobs_wrt_concI0(concI0: np.ndarray, kobs: np.ndarray, nondefault_params: dict = None):
+def KI_kinact_n_fit_to_kobs_wrt_concI0(concI0: np.array, kobs: np.array, nondefault_params: dict = None):
     """
     Fit parameters (KI, kinact, n) to kobs with respect to concI0 using a structured dictionary for parameters.
 
@@ -210,3 +210,32 @@ class Parameters:
         Covalent efficiency (i.e. specificity, potency) calculation (kinact/KI)
         """
         return kinact/Parameters.KI(kon, koff, kinact)
+
+class Experiments:
+    """
+    Common place for experimental setups in covalent inhibition literature.
+    """
+    @staticmethod
+    def timecourse(kobs,concI0,KI,kinact,Etot,fracEavail=1,tmax=1000,n=100):
+        """
+        Simulate a timecourse experiment for covalent inhibition.
+
+        Args:
+            kobs: Observed rate constant.
+            concI0: Initial concentration of the (saturating) inhibitor.
+            KI: Inhibition constant, where kobs = kinact/2, analogous to K_M, K_D, and K_A. Must be in the same units as concI0.
+            kinact: Maximum potential rate of covalent bond formation.
+            Etot: Total concentration of E across all species.
+            fracEavail: Fraction of available E. Default=1, ie all E is avail
+            tmax: Maximum time to simulate.
+            n: Number of timepoints to simulate.
+
+        Returns:
+            np.array: Timepoints.
+            np.array: Occupancy of final occupancy (Occ_cov).
+            np.array: Occupancy of total occupancy (Occ_tot).
+        """
+        t = np.linspace(0,tmax,n)
+        Occ_cov = occ_final_wrt_t(t,kobs,Etot,fracEavail)
+        Occ_tot = occ_total_wrt_t(t,kobs,concI0,KI,Etot,fracEavail)
+        return t, Occ_cov, Occ_tot

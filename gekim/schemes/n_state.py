@@ -5,21 +5,19 @@ import logging
 import sys
 from scipy.integrate import solve_ivp
 
+class _Species:
+    def __init__(self, name, species_data:dict):
+        self.name = name
+        self.concentration = species_data.get('conc')
+        self.index = species_data.get('index')
+        self.label = species_data.get('label', self.name)
+        self.color = species_data.get('color')
+
+
+
+
 class NState:
     #TODO: Make sure its all np arrays and not lists 
-    #TODO: Add traj attr to species that points to the traj object output from a traj. could have attr's for deterministic or stochastic. have a sum method like below in a traj attr under NState:
-    def sum_concentrations(NState,whitelist:list=None,blacklist:list=None):
-        """
-        Sum the concentrations of species in an NState model.
-        """
-        if not whitelist and not blacklist:
-            raise ValueError("Cannot provide both a whitelist and blacklist.")
-        if not whitelist:
-            return sum([NState.concentrations[NState.species_order[species]] for species in whitelist])
-        elif not blacklist:
-            return sum([NState.concentrations[NState.species_order[species]] for species in NState.species if species not in blacklist])
-        else:
-            return sum(NState.concentrations)
     #TODO: Add stochastic method
     
     def __init__(self, config, logfilename=None, quiet=False):
@@ -54,13 +52,19 @@ class NState:
             raise ValueError("Invalid config data provided.")
         
         self.config = copy.deepcopy(config)
+    
         self.species = self.config['species']
-        self.species_order = {name: idx for idx, name in enumerate(self.config['species'])}
+        # Document the order of the species
+        for idx, name in enumerate(self.config['species']):
+            self.species[name]['index'] = idx
+        self._validate_species()
+
         self.transitions = self.config['transitions']
         self._preprocess_transitions()
-        self.traj_deterministic = None
+
+        self.t = None
         
-        self.logger.info(f"NState model initialized successfully.")
+        self.logger.info(f"NState system initialized successfully.")
 
     def _validate_config(self, config):
         """
@@ -74,6 +78,57 @@ class NState:
         """
         #TODO: Make sure names are unique and nonempty 
         return 'species' in config and 'transitions' in config
+
+    def _validate_species(self):
+        """
+        Validate the species data in the configuration.
+
+        Returns:
+        bool: True if valid, False otherwise.
+        """
+        labels = set()
+        for name, data in self.species.items():
+            # Validate labels
+            label = data.get('label')
+            if label in labels:
+                self.logger.error(f"Duplicate label '{label}' found for species '{name}'.")
+                return False
+            labels.add(label)
+        
+            # Validate concentrations
+            if not 'conc' in data.keys():
+                raise ValueError("Initial concentration not found in species[name]['conc'].")
+            conc = data.get('conc')
+            if not isinstance(conc, np.ndarray):
+                data['conc'] = np.array([conc])
+        return True
+                
+    def sum_conc(self,whitelist:list=None,blacklist:list=None):
+        """
+        Sum the concentrations of specified species in the model.
+        Whitelist and blacklist cannot be provided simultaneously.
+
+        Parameters:
+        whitelist (list, optional): Names of species to include in the sum.
+        blacklist (list, optional): Names of species to exclude from the sum.
+
+        Returns:
+        float: The sum of the concentrations.
+        """
+        if whitelist and blacklist:
+            raise ValueError("Provide either a whitelist or a blacklist, not both.")
+
+        species_names = self.species.keys()
+
+        if whitelist:
+            species_names = [name for name in whitelist if name in species_names]
+        elif blacklist:
+            species_names = [name for name in species_names if name not in blacklist]
+
+        total_concentration = np.sum([self.species[name]['conc'] for name in species_names], axis=0)
+
+        return total_concentration
+
 
     def _preprocess_transitions(self):
         """
@@ -105,22 +160,22 @@ class NState:
 
         Parameters:
         t (float): Time.
-        concentrations (numpy.ndarray): Array of species concentrations.
+        concentrations (numpy.array): Array of species concentrations.
 
         Returns:
-        numpy.ndarray: Array of concentration time derivatives.
+        numpy.array: Array of concentration time derivatives.
         """
         dcdt_arr = np.zeros(len(self.species))
         for tr in self.transitions.values():
             rate_constant = tr['value']
-            rate = rate_constant * np.prod([concentrations[self.species_order[sp_name]] ** coeff for coeff, sp_name in tr['from']])
+            rate = rate_constant * np.prod([concentrations[self.species[sp_name]['index']] ** coeff for coeff, sp_name in tr['from']])
             for coeff, sp_name in tr['from']:
-                dcdt_arr[self.species_order[sp_name]] -= coeff * rate
+                dcdt_arr[self.species[sp_name]['index']] -= coeff * rate
             for coeff, sp_name in tr['to']:
-                dcdt_arr[self.species_order[sp_name]] += coeff * rate
+                dcdt_arr[self.species[sp_name]['index']] += coeff * rate
         return dcdt_arr
 
-    def log_dcdts(self):
+    def log_dcdts(self,force_print=False):
         """
         Log the ordinary differential equations for the concentrations of each species over time in a readable format.
         """
@@ -162,19 +217,22 @@ class NState:
             ode_log += formatted_eqn + '\n\n'
 
         self.logger.info(ode_log)
+        if force_print:
+            print(ode_log)
 
-    def simulate_deterministic(self, t, method='BDF'):
+    def simulate_deterministic(self, t, method='BDF', output_raw=False):
         """
-        Solve the ordinary differential equations for the system.
+        Solve the ODEs for the system with flexible output handling.
 
         Parameters:
-        t (list or numpy.ndarray): Time points to solve the ODEs at.
-        method: integration method. Default is BDF.
+        t (np.array): Time points for ODE solutions.
+        method (str): Integration method, default is 'BDF'.
+        output_raw (bool): If True, return raw solution data. Concentrations will be in solution.y.T
 
-        Raises:
-        RuntimeError: If the ODE solver fails.
+        Returns:
+        Dict or None, depending on output_mode.
         """
-        conc0 = np.array([sp["conc0"] for _, sp in self.species.items()])
+        conc0 = np.array([np.atleast_1d(sp['conc'])[0] for _, sp in self.species.items()])
         t_span = (t[0], t[-1])
         self.log_dcdts()
         try:
@@ -184,12 +242,21 @@ class NState:
             )
             if not solution.success:
                 raise RuntimeError("ODE solver failed: " + solution.message)
-            self.traj_deterministic = solution.y.T
+
+            self.t = t
+            for name,data in self.species.items():
+                data['conc'] = solution.y[data['index']].T
+
             self.logger.info("ODEs solved successfully.")
+
+            if output_raw:
+                return solution
+            else:
+                return
         except Exception as e:
             self.logger.error(f"Error in solving ODEs: {e}")
             raise
 
-    def _gillespie_sim(self):
+    def simulate_stochastic(self):
         raise NotImplementedError("TODO: Gillespie alg")
         

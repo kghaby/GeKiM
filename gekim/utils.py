@@ -2,8 +2,6 @@ from scipy.optimize import curve_fit
 import numpy as np
 import math
 import colorsys
-from .schemes.n_state import NState
-
 
 def rate_pair_from_proportion(intOOM,Pf):
     """
@@ -37,49 +35,50 @@ def round_sig(num, sig_figs, autoformat=True):
     else:
         return result
 
-def assign_colors_to_species(schemes, saturation_range=(0.5, 0.7), lightness_range=(0.3, 0.4), method=None, offset=0, overwrite_existing=False):
-    """
-    Assigns a distinct and aesthetically distributed color to each species in the provided dictionary of kinetic schemes. 
-    Uses the golden ratio for even hue distribution.
-    Method can be "GR" to use the golden ratio to generate the hues.
-    Offset can be used to offset the hues.
-    overwrite_existing: If True, overwrite existing colors; if False, assign colors only to species without colors.
-    """
-    #TODO: This only works with a dictionary of schemes. It should work on single schemes too
-    unique_species = set()
-    for scheme in schemes.values():
-        unique_species.update(scheme["species"].keys())
+class Viz:
+    def assign_colors_to_species(schemes, saturation_range=(0.5, 0.7), lightness_range=(0.3, 0.4), method=None, offset=0, overwrite_existing=False):
+        """
+        Assigns a distinct and aesthetically distributed color to each species in the provided dictionary of kinetic schemes. 
+        Uses the golden ratio for even hue distribution.
+        Method can be "GR" to use the golden ratio to generate the hues.
+        Offset can be used to offset the hues.
+        overwrite_existing: If True, overwrite existing colors; if False, assign colors only to species without colors.
+        """
+        #TODO: This only works with a dictionary of schemes. It should work on single schemes too
+        unique_species = set()
+        for scheme in schemes.values():
+            unique_species.update(scheme["species"].keys())
 
-    golden_ratio_conjugate = 0.618033988749895
-    hue = 0
+        golden_ratio_conjugate = 0.618033988749895
+        hue = 0
 
-    n_colors = len(unique_species)
-    color_mapping = {}
-    hues = np.linspace(0, 1, n_colors, endpoint=False)
+        n_colors = len(unique_species)
+        color_mapping = {}
+        hues = np.linspace(0, 1, n_colors, endpoint=False)
 
-    for i, species in enumerate(unique_species):
-        # Skip species with existing color unless overwriting
-        if not overwrite_existing and (species in scheme["species"] and "color" in scheme["species"][species]):
-            continue
+        for i, species in enumerate(unique_species):
+            # Skip species with existing color unless overwriting
+            if not overwrite_existing and (species in scheme["species"] and "color" in scheme["species"][species]):
+                continue
 
-        if method == "GR":
-            hue += golden_ratio_conjugate + offset
-        else:
-            hue = hues[i] + offset
-        hue %= 1
+            if method == "GR":
+                hue += golden_ratio_conjugate + offset
+            else:
+                hue = hues[i] + offset
+            hue %= 1
 
-        lightness = np.random.uniform(*lightness_range)
-        saturation = np.random.uniform(*saturation_range)
-        r, g, b = colorsys.hls_to_rgb(hue, lightness, saturation)
-        hex_color = f'#{int(r * 255):02x}{int(g * 255):02x}{int(b * 255):02x}'
-        color_mapping[species] = hex_color
+            lightness = np.random.uniform(*lightness_range)
+            saturation = np.random.uniform(*saturation_range)
+            r, g, b = colorsys.hls_to_rgb(hue, lightness, saturation)
+            hex_color = f'#{int(r * 255):02x}{int(g * 255):02x}{int(b * 255):02x}'
+            color_mapping[species] = hex_color
 
-    for scheme in schemes.values():
-        for species in scheme["species"].keys():
-            if overwrite_existing or "color" not in scheme["species"][species]:
-                scheme["species"][species]["color"] = color_mapping.get(species, scheme["species"][species].get("color"))
+        for scheme in schemes.values():
+            for species in scheme["species"].keys():
+                if overwrite_existing or "color" not in scheme["species"][species]:
+                    scheme["species"][species]["color"] = color_mapping.get(species, scheme["species"][species].get("color"))
 
-    return schemes
+        return schemes
 
 def _update_dict_with_subset(defaults: dict, updates: dict):
     """

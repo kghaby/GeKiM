@@ -3,11 +3,11 @@ import numpy as np
 import math
 import colorsys
 
-def rate_pair_from_proportion(intOOM,Pf):
+def rate_pair_from_P(intOOM,Pf):
     """
     Provides rates between two states that are at rapid equilibrium and therefore approximated by the population distribution. 
     intOOM is the order of magnitude of the rates.
-    Pf is the proportion of the forward state, ie kf/(kf+kb) or [B]/([A]+[B]) for A<-->B.
+    Pf is the probability of the forward state, ie kf/(kf+kb) or [B]/([A]+[B]) for A<-->B.
     """
     kf=Pf*10**(float(intOOM)+1)
     kb=10**(float(intOOM)+1)-kf
@@ -35,7 +35,7 @@ def round_sig(num, sig_figs, autoformat=True):
     else:
         return result
 
-class Viz:
+class Plotting:
     def assign_colors_to_species(schemes, saturation_range=(0.5, 0.7), lightness_range=(0.3, 0.4), method=None, offset=0, overwrite_existing=False):
         """
         Assigns a distinct and aesthetically distributed color to each species in the provided dictionary of kinetic schemes. 
@@ -56,9 +56,17 @@ class Viz:
         color_mapping = {}
         hues = np.linspace(0, 1, n_colors, endpoint=False)
 
+        # Add existing colors to mapping
+        if not overwrite_existing:
+            for species in unique_species:
+                for scheme in schemes.values():
+                    if species in scheme["species"] and "color" in scheme["species"][species]:
+                        color_mapping[species] = scheme["species"][species]["color"]
+                        break # Keep first match
+                
         for i, species in enumerate(unique_species):
             # Skip species with existing color unless overwriting
-            if not overwrite_existing and (species in scheme["species"] and "color" in scheme["species"][species]):
+            if not overwrite_existing and species in color_mapping:
                 continue
 
             if method == "GR":

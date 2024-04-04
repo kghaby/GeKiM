@@ -50,7 +50,7 @@ final_state = system.species["EI"]['conc']
 all_bound = system.sum_conc(blacklist=["E","I","Et"])
 fit_output = ci.kobs_fracEavail_fit_to_occ_final_wrt_t(
     t,final_state,nondefault_params={"Etot":{"fix":concE0}})
-print(f"Scheme: {name}\nFit: {fit_output.fitted_params}\n")
+print(f"Fit: {fit_output.fitted_params}\n")
 ```
 For more detailed examples, please refer to the examples directory.
 

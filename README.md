@@ -21,13 +21,15 @@ pip install .
 ## Usage
 Here is a basic example of how to use GeKiM to create and simulate a kinetic model:
 ```python
-import gekim
+import gekim as gk
+from gekim.analysis import covalent_inhibition as ci
 
 # Define your kinetic scheme in a configuration dictionary
+concE0 = 1
 config = {
     'species': {
         "I": {"conc": 100, "label": "$I$"},
-        "E": {"conc": 1, "label": "$E$"},
+        "E": {"conc": concE0, "label": "$E$"},
         "EI": {"conc": 0, "label": "$EI$"},
     },    
     'transitions': {
@@ -37,19 +39,18 @@ config = {
 }
 
 # Create a model
-model = gekim.scheme.NState(config)
+model = gk.scheme.NState(config)
 
 # Define time points and simulate. In this example we're doing a deterministic simulation of the concentrations of each species. 
 t = np.linspace(0.0001, 1000, 10)
 model.simulate_deterministic(t)
 
-# Solution will be columned data of concentrations
-print(model.traj_deterministic)
-
-# Find the observed rate of occupancy 
-occupancy = model.traj_deterministic[:,model.species["EI"]['index']]
-kobs = gekim.analysis.CovalentInhibition.kobs_fit_to_occ_final_wrt_t(t,occupancy)
-print(kobs)
+# Fit the data to experimental models to extract mock-experimental measurements
+final_state = system.species["EI"]['conc']
+all_bound = system.sum_conc(blacklist=["E","I","Et"])
+fit_output = ci.kobs_fracEavail_fit_to_occ_final_wrt_t(
+    t,final_state,nondefault_params={"Etot":{"fix":concE0}})
+print(f"Scheme: {name}\nFit: {fit_output.fitted_params}\n")
 ```
 For more detailed examples, please refer to the examples directory.
 

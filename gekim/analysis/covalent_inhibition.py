@@ -4,6 +4,8 @@ from ..utils import _update_dict_with_subset
 from . import fitting
 
 
+# TODO: check if nondefault_params can be a dict without breaking stuff. Like how it cant be a list bc list is mutable and all calls share the same default list
+    
 def occ_final_wrt_t(t,kobs,Etot,fracEavail=1):
     '''
     Args:nondefault_params

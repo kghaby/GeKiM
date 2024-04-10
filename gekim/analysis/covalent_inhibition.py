@@ -6,20 +6,20 @@ from . import fitting
 
 # TODO: check if nondefault_params can be a dict without breaking stuff. Like how it cant be a list bc list is mutable and all calls share the same default list
     
-def occ_final_wrt_t(t,kobs,Etot,fracEavail=1):
+def occ_final_wrt_t(t,kobs,Etot,avail=1):
     '''
     Args:nondefault_params
         t: Array of timepoints.
         kobs: Observed rate constant.
         Etot: Total concentration of E across all species.
-        fracEavail: Fraction of available E. Default=1, ie all E is avail
+        avail: Availability scalar. Fraction of available E. Default=1, ie all E is avail
 
     Returns:
         np.array: Occupancy of final occupancy (Occ_cov).
     '''
-    return fracEavail*Etot*(1-np.e**(-kobs*t))
+    return avail*Etot*(1-np.e**(-kobs*t))
 
-def kobs_fracEavail_fit_to_occ_final_wrt_t(t: np.array, occ_final: np.array, nondefault_params: dict = None): 
+def kobs_avail_fit_to_occ_final_wrt_t(t: np.array, occ_final: np.array, nondefault_params: dict = None): 
     '''
     Fit kobs to the first order occupancy over time.
 
@@ -30,7 +30,7 @@ def kobs_fracEavail_fit_to_occ_final_wrt_t(t: np.array, occ_final: np.array, non
             default_params = {
                 "kobs": {"fix": None, "guess": 0.01, "bounds": (0,np.inf)}, # Observed rate constant
                 "Etot": {"fix": None, "guess": 1, "bounds": (0,np.inf)},    # Total concentration of E over all species
-                "fracEavail": {"fix": None, "guess": 1, "bounds": (0,1)},   # Fraction of available E 
+                "avail": {"fix": None, "guess": 1, "bounds": (0,1)},   # Availability scalar
             }
 
     Returns:
@@ -38,15 +38,15 @@ def kobs_fracEavail_fit_to_occ_final_wrt_t(t: np.array, occ_final: np.array, non
     
     Example:
         ```python
-        fit_output =  ci.kobs_fracEavail_fit_to_occ_final_wrt_t(t,system.traj_deterministic[:,system.species["EI"]['index']],nondefault_params={"Etot":{"fix":concE0}})
+        fit_output =  ci.kobs_avail_fit_to_occ_final_wrt_t(t,system.traj_deterministic[:,system.species["EI"]['index']],nondefault_params={"Etot":{"fix":concE0}})
         ```
-        Will fit kobs and fracEavail to the concentration of EI over time, fixing Etot at concE0.
+        Will fit kobs and avail to the concentration of EI over time, fixing Etot at concE0.
     '''
     # Default
     params = {
         "kobs": {"fix": None, "guess": 0.01, "bounds": (0,np.inf)},
         "Etot": {"fix": None, "guess": 1, "bounds": (0,np.inf)},
-        "fracEavail": {"fix": None, "guess": 1, "bounds": (0,1)}, 
+        "avail": {"fix": None, "guess": 1, "bounds": (0,np.inf)}, 
     }
 
     if nondefault_params is not None:
@@ -56,7 +56,7 @@ def kobs_fracEavail_fit_to_occ_final_wrt_t(t: np.array, occ_final: np.array, non
 
     def fitting_adapter(t, *fitting_params):
         all_params = {**fixed_params, **dict(zip(param_order, fitting_params))}
-        return occ_final_wrt_t(t,all_params["kobs"],all_params["Etot"],fracEavail=all_params["fracEavail"])
+        return occ_final_wrt_t(t,all_params["kobs"],all_params["Etot"],avail=all_params["avail"])
 
     popt, pcov = curve_fit(fitting_adapter, t, occ_final, p0=p0, bounds=tuple(bounds))
     fitted_data = fitting_adapter(t, *popt)
@@ -64,7 +64,7 @@ def kobs_fracEavail_fit_to_occ_final_wrt_t(t: np.array, occ_final: np.array, non
 
     return fit_output
 
-def occ_total_wrt_t(t,kobs,concI0,KI,Etot,fracEavail=1):
+def occ_total_wrt_t(t,kobs,concI0,KI,Etot,avail=1):
     '''
     Calculates pseudo-first-order total occupancy of all bound states, assuming fast reversible binding equilibrated at t=0.
 
@@ -74,16 +74,16 @@ def occ_total_wrt_t(t,kobs,concI0,KI,Etot,fracEavail=1):
         concI0: Initial concentration of the (saturating) inhibitor.
         KI: Inhibition constant, where kobs = kinact/2, analogous to K_M, K_D, and K_A. Must be in the same units as concI0.
         Etot: Total concentration of E across all species.
-        fracEavail: Fraction of available E. Default=1, ie all E is avail
+        avail: Fraction of available E. Default=1, ie all E is avail
     
     Returns:
         np.array: Occupancy of total occupancy (Occ_tot).
     '''
 
     FO = 1/(1+(KI/concI0)) # Equilibrium occupancy of reversible portion
-    return fracEavail*Etot*(1-(1-FO)*(np.e**(-kobs*t)))
+    return avail*Etot*(1-(1-FO)*(np.e**(-kobs*t)))
 
-def kobs_KI_fracEavail_fit_to_occ_total_wrt_t(t: np.array, occ_tot: np.array, nondefault_params: dict = None): 
+def kobs_KI_avail_fit_to_occ_total_wrt_t(t: np.array, occ_tot: np.array, nondefault_params: dict = None): 
     '''
     Fit kobs and KI to the total occupancy of all bound states over time, assuming fast reversible binding equilibrated at t=0.
 
@@ -95,7 +95,7 @@ def kobs_KI_fracEavail_fit_to_occ_total_wrt_t(t: np.array, occ_tot: np.array, no
             "concI0": {"fix": None, "guess": 100, "bounds": (0,np.inf)},
             "KI": {"fix": None, "guess": 10, "bounds": (0,np.inf)},
             "Etot": {"fix": None, "guess": 1, "bounds": (0,np.inf)},
-            "fracEavail": {"fix": None, "guess": 1, "bounds": (0,1)}, 
+            "avail": {"fix": None, "guess": 1, "bounds": (0,1)}, 
         }
 
     Returns:
@@ -107,7 +107,7 @@ def kobs_KI_fracEavail_fit_to_occ_total_wrt_t(t: np.array, occ_tot: np.array, no
         "concI0": {"fix": None, "guess": 100, "bounds": (0,np.inf)},
         "KI": {"fix": None, "guess": 10, "bounds": (0,np.inf)},
         "Etot": {"fix": None, "guess": 1, "bounds": (0,np.inf)},
-        "fracEavail": {"fix": None, "guess": 1, "bounds": (0,1)}, 
+        "avail": {"fix": None, "guess": 1, "bounds": (0,1)}, 
     }
 
     if nondefault_params is not None:
@@ -117,7 +117,7 @@ def kobs_KI_fracEavail_fit_to_occ_total_wrt_t(t: np.array, occ_tot: np.array, no
 
     def fitting_adapter(t, *fitting_params):
         all_params = {**fixed_params, **dict(zip(param_order, fitting_params))}
-        return occ_total_wrt_t(t,all_params["kobs"],all_params["concI0"],all_params["KI"],all_params["Etot"],fracEavail=all_params["fracEavail"])
+        return occ_total_wrt_t(t,all_params["kobs"],all_params["concI0"],all_params["KI"],all_params["Etot"],avail=all_params["avail"])
 
     popt, pcov = curve_fit(fitting_adapter, t, occ_tot, p0=p0, bounds=tuple(bounds))
     fitted_data = fitting_adapter(t, *popt)

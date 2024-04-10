@@ -4,7 +4,32 @@ import copy
 import logging
 import sys
 from scipy.integrate import solve_ivp
+from numba import njit
+from ..fortran.kinetics import kinetics
 
+@njit
+def _dcdt(t, concentrations, rate_constants, stoich_matrix_from, stoich_matrix_to,num_reactions):
+    """
+    Compute the derivative of concentrations with respect to time.
+
+    Parameters:
+    t (float): Time.
+    concentrations (numpy.array): Array of species concentrations.
+
+    Returns:
+    numpy.array: Array of concentration time derivatives.
+    """
+    dcdt_arr = np.zeros_like(concentrations)
+    for i in range(num_reactions):
+        rate = rate_constants[i]
+        reactant_mask = stoich_matrix_from[:, i] > 0
+        for j, is_reactant in enumerate(reactant_mask):
+            if is_reactant:
+                rate *= concentrations[j] ** stoich_matrix_from[j, i]
+        net_change = stoich_matrix_to[:, i] - stoich_matrix_from[:, i]
+        dcdt_arr += rate * net_change
+    return dcdt_arr
+        
 class NState:
     #TODO: Make sure its all np arrays and not lists 
     #TODO: Add stochastic method
@@ -37,8 +62,7 @@ class NState:
         #stream_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
         self.logger.addHandler(stream_handler)
 
-        if not self._validate_config(config):
-            raise ValueError("Invalid config data provided.")
+        self._validate_config(config)
         
         self.config = copy.deepcopy(config)
     
@@ -52,21 +76,15 @@ class NState:
         self._preprocess_transitions()
 
         self.t = None
+        self._rate_constants = np.array([tr['value'] for tr in self.transitions.values()])
+        self._stoich_matrix_from, self._stoich_matrix_to = self._build_stoichiometry_matrix()
         
         self.logger.info(f"NState system initialized successfully.")
 
-    def _validate_config(self, config):
-        """
-        Validate the provided configuration data.
-
-        Parameters:
-        config (dict): Configuration to validate.
-
-        Returns:
-        bool: True if valid, False otherwise.
-        """
+    def _validate_config(self,config):
         #TODO: Make sure names are unique and nonempty 
-        return 'species' in config and 'transitions' in config
+        if not 'species' in config or not 'transitions' in config:
+            raise ValueError("Config must contain 'species' and 'transitions' keys.")
 
     def _validate_species(self):
         """
@@ -142,9 +160,30 @@ class NState:
         coeff = int(match.groups()[0]) if match and match.groups()[0] else 1
         name = match.groups()[1] if match else species_str
         return coeff, name
+    
+    def _build_stoichiometry_matrix(self):
+        num_species = len(self.species)
+        num_transitions = len(self.transitions)
+        stoich_matrix_from = np.zeros((num_species, num_transitions))
+        stoich_matrix_to = np.zeros((num_species, num_transitions))
+        
+        for tr_idx, (tr_name, tr) in enumerate(self.transitions.items()):
+            for reactant in tr['from']:
+                coeff, name = reactant
+                sp_idx = self.species[name]['index']
+                stoich_matrix_from[sp_idx, tr_idx] = coeff
+            
+            for product in tr['to']:
+                coeff, name = product
+                sp_idx = self.species[name]['index']
+                stoich_matrix_to[sp_idx, tr_idx] = coeff
+        #net_stoich_matrix = (stoich_matrix_from - stoich_matrix_to)
+
+        return stoich_matrix_from,stoich_matrix_to
 
     def _dcdt(self, t, concentrations):
         """
+        Slightly slower than vectorized algorithm due to more rigorous iteration.
         Compute the derivative of concentrations with respect to time.
 
         Parameters:
@@ -154,16 +193,19 @@ class NState:
         Returns:
         numpy.array: Array of concentration time derivatives.
         """
-        dcdt_arr = np.zeros(len(self.species))
+        #TODO: vectorize and use numba by preprocessing to cover edge cases. Also, write tests for edge cases, esp regarding stoichiometry. I might have the test configs somewhere 
+        dcdt_arr = np.zeros_like(concentrations)
         for tr in self.transitions.values():
             rate_constant = tr['value']
             rate = rate_constant * np.prod([concentrations[self.species[sp_name]['index']] ** coeff for coeff, sp_name in tr['from']])
+            # Iterating through like this is beneficial because it captures stoichiometry that is evident in the list rather than coefficient 
+                # (eg "from": ["E","E", "I"] is equal to "from": ["2E", "I"])
             for coeff, sp_name in tr['from']:
                 dcdt_arr[self.species[sp_name]['index']] -= coeff * rate
             for coeff, sp_name in tr['to']:
                 dcdt_arr[self.species[sp_name]['index']] += coeff * rate
         return dcdt_arr
-
+        
     def log_dcdts(self,force_print=False):
         """
         Log the ordinary differential equations for the concentrations of each species over time in a readable format.
@@ -208,14 +250,19 @@ class NState:
         self.logger.info(ode_log)
         if force_print:
             print(ode_log)
+    
 
-    def simulate_deterministic(self, t, method='BDF', output_raw=False):
+
+    def simulate_deterministic(self, t, method='BDF', rtol=1e-6, atol=1e-8, output_raw=False):
         """
         Solve the ODEs for the system with flexible output handling.
 
         Parameters:
         t (np.array): Time points for ODE solutions.
         method (str): Integration method, default is 'BDF'.
+
+        rtol (float): Relative tolerance for the solver. Default is 1e-6
+        atol (float): Absolute tolerance for the solver. Default is 1e-8
         output_raw (bool): If True, return raw solution data. Concentrations will be in solution.y.T
 
         Returns:
@@ -224,10 +271,57 @@ class NState:
         conc0 = np.array([np.atleast_1d(sp['conc'])[0] for _, sp in self.species.items()])
         t_span = (t[0], t[-1])
         self.log_dcdts()
+        num_reactions = self._rate_constants.shape[0]
         try:
             solution = solve_ivp(
-                lambda t, conc: self._dcdt(t, conc),
-                t_span, conc0, t_eval=t, method=method, rtol=1e-6, atol=1e-8
+                fun=lambda t, conc: self._dcdt(t, conc),
+                t_span=t_span, y0=conc0, t_eval=t, method=method, rtol=rtol, atol=atol
+            )
+            if not solution.success:
+                raise RuntimeError("ODE solver failed: " + solution.message)
+
+            self.t = t
+            for name,data in self.species.items():
+                data['conc'] = solution.y[data['index']].T
+
+            self.logger.info("ODEs solved successfully.")
+
+            if output_raw:
+                return solution
+            else:
+                return
+        except Exception as e:
+            self.logger.error(f"Error in solving ODEs: {e}")
+            raise
+    
+    def _simulate_deterministic(self, t, method='BDF', rtol=1e-6, atol=1e-8, output_raw=False):
+        """
+        Uses fortran to calc ODE set. A tad slower.
+        Solve the ODEs for the system with flexible output handling.
+
+        Parameters:
+        t (np.array): Time points for ODE solutions.
+        method (str): Integration method, default is 'BDF'.
+
+        rtol (float): Relative tolerance for the solver. Default is 1e-6
+        atol (float): Absolute tolerance for the solver. Default is 1e-8
+        output_raw (bool): If True, return raw solution data. Concentrations will be in solution.y.T
+
+        Returns:
+        Dict or None, depending on output_mode.
+        """
+        def odes(t, conc):
+            dcdt = np.zeros_like(conc)  # dcdt also needs to be of dtype=np.float32 to match Fortran expectations
+            kinetics.calc_dcdt(conc, self._rate_constants, self._stoich_matrix_from, self._stoich_matrix_to, dcdt, num_species)
+            return dcdt
+        conc0 = np.array([np.atleast_1d(sp['conc'])[0] for _, sp in self.species.items()])
+        t_span = (t[0], t[-1])
+        self.log_dcdts()
+        num_species = len(self.species)
+        try:
+            solution = solve_ivp(
+                fun=odes,
+                t_span=t_span, y0=conc0, t_eval=t, method=method, rtol=rtol, atol=atol
             )
             if not solution.success:
                 raise RuntimeError("ODE solver failed: " + solution.message)
@@ -248,4 +342,6 @@ class NState:
 
     def simulate_stochastic(self):
         raise NotImplementedError("TODO: Gillespie alg")
-        
+
+
+

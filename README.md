@@ -48,7 +48,7 @@ model.simulate_deterministic(t)
 # Fit the data to experimental models to extract mock-experimental measurements
 final_state = system.species["EI"]['conc']
 all_bound = system.sum_conc(blacklist=["E","I","Et"])
-fit_output = ci.kobs_fracEavail_fit_to_occ_final_wrt_t(
+fit_output = ci.kobs_avail_fit_to_occ_final_wrt_t(
     t,final_state,nondefault_params={"Etot":{"fix":concE0}})
 print(f"Fit: {fit_output.fitted_params}\n")
 ```

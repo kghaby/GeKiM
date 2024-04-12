@@ -263,7 +263,7 @@ class NState:
 
         rtol (float): Relative tolerance for the solver. Default is 1e-6
         atol (float): Absolute tolerance for the solver. Default is 1e-8
-        output_raw (bool): If True, return raw solution data. Concentrations will be in solution.y.T
+        output_raw (bool): If True, return raw solution.y.T array. Each column is a species.
 
         Returns:
         Dict or None, depending on output_mode.
@@ -271,7 +271,7 @@ class NState:
         conc0 = np.array([np.atleast_1d(sp['conc'])[0] for _, sp in self.species.items()])
         t_span = (t[0], t[-1])
         self.log_dcdts()
-        num_reactions = self._rate_constants.shape[0]
+        # num_reactions = self._rate_constants.shape[0] #used in faster alg
         try:
             solution = solve_ivp(
                 fun=lambda t, conc: self._dcdt(t, conc),
@@ -287,7 +287,7 @@ class NState:
             self.logger.info("ODEs solved successfully.")
 
             if output_raw:
-                return solution
+                return solution.y.T
             else:
                 return
         except Exception as e:

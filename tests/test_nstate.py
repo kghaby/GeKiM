@@ -1,70 +1,250 @@
-import gekim
+import gekim as gk
+import gekim.analysis.covalent_inhibition as ci
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.integrate import solve_ivp
 
+# Test whether gekim NState systems yield the same output as hardcoded systems
+
+# User option to plot time course of NState systems (will still plot on mismatch)
+PLOT=True
+
+# Params
+Kd = 10 #nM, koff/kon
+koff = 0.0001 #~1/15 min
+kon = koff/Kd
+concI0,concE0=100,1
+kinactf=0.001
+kinactb=0
+t = np.linspace(kon, 10000, 10000)
+
+# Define gekim schemes
 schemes={}
-schemes["3S"] = {
+schemes["3S_vani"] = {
     "species": {
-        "I": {"conc": 100, "label": r"$I$"},
-        "E": {"conc": 1, "label": r"$E$"},
-        "E_I": {"conc": 0, "label": r"$E{\cdot}I$"},
-        "EI": {"conc": 0, "label": r"$E\text{-}I$"},
+        "I": {"conc": concI0, "label": r"I"},
+        "E": {"conc": concE0, "label": r"E"},
+        "E_I": {"conc": 0, "label": r"E${\cdot}$I"},
+        "EI": {"conc": 0, "label": r"E-I"},
     },
     "transitions": {
-        "k1": {"value": 0.0001, "from": ["E", "I"], "to": ["E_I"], "label": r"$k_{on}$"},
-        "k2": {"value": 0.01, "from": ["E_I"], "to": ["E", "I"], "label": r"$k_{off}$"},
-        "k3": {"value": 0.001, "from": ["E_I"], "to": ["EI"]}, #irrev step
-        "k4": {"value": 0, "from": ["EI"], "to": ["E_I"]},
+        "k1": {"value": kon, "from": ["E", "I"], "to": ["E_I"], "label": r"$k_{on}$"},
+        "k2": {"value": koff, "from": ["E_I"], "to": ["E", "I"], "label": r"$k_{off}$"},
+        "k3": {"value": kinactf, "from": ["E_I"], "to": ["EI"]}, #irrev step
+        "k4": {"value": kinactb, "from": ["EI"], "to": ["E_I"]},
     },
 }
-schemes["3Scoeff1"] = {
+schemes["3S_mod1.1"] = {
     "species": {
-        "I": {"conc": 100, "label": r"$I$"},
-        "E": {"conc": 1, "label": r"$E$"},
-        "E_I": {"conc": 0, "label": r"$E{\cdot}I$"},
-        "EI": {"conc": 0, "label": r"$E\text{-}I$"},
+        "I": {"conc": concI0, "label": r"I"},
+        "E": {"conc": concE0, "label": r"E"},
+        "E_I": {"conc": 0, "label": r"E${\cdot}$I"},
+        "EI": {"conc": 0, "label": r"E-I"},
     },
     "transitions": {
-        "k1": {"value": 0.0001, "from": ["E", "2I"], "to": ["E_I"], "label": r"$k_{on}$"},
-        "k2": {"value": 0.01, "from": ["E_I"], "to": ["E", "2I"], "label": r"$k_{off}$"},
-        "k3": {"value": 0.001, "from": ["3E_I"], "to": ["7EI"]}, #irrev step
-        "k4": {"value": 0, "from": ["7EI"], "to": ["3E_I"]},
+        "k1": {"value": kon, "from": ["E", "2I"], "to": ["E_I"], "label": r"$k_{on}$"},
+        "k2": {"value": koff, "from": ["E_I"], "to": ["E", "2I"], "label": r"$k_{off}$"},
+        "k3": {"value": kinactf, "from": ["3E_I"], "to": ["7EI"]}, #irrev step
+        "k4": {"value": kinactb, "from": ["7EI"], "to": ["3E_I"]},
     },
 }
-schemes["3Scoeff2"] = {
+schemes["3S_mod1.2"] = {
     "species": {
-        "I": {"conc": 100, "label": r"$I$"},
-        "E": {"conc": 1, "label": r"$E$"},
-        "E_I": {"conc": 0, "label": r"$E{\cdot}I$"},
-        "EI": {"conc": 0, "label": r"$E\text{-}I$"},
+        "I": {"conc": concI0, "label": r"I"},
+        "E": {"conc": concE0, "label": r"E"},
+        "E_I": {"conc": 0, "label": r"E${\cdot}$I"},
+        "EI": {"conc": 0, "label": r"E-I"},
     },
     "transitions": {
-        "k1": {"value": 0.0001, "from": ["E", "I", "I"], "to": ["E_I"], "label": r"$k_{on}$"},
-        "k2": {"value": 0.01, "from": ["E_I"], "to": ["E", "I", "I"], "label": r"$k_{off}$"},
-        "k3": {"value": 0.001, "from": ["E_I","E_I","E_I"], "to": ["7EI"]}, #irrev step
-        "k4": {"value": 0, "from": ["7EI"], "to": ["E_I","E_I","E_I"]},
+        "k1": {"value": kon, "from": ["E", "I", "I"], "to": ["E_I"], "label": r"$k_{on}$"},
+        "k2": {"value": koff, "from": ["E_I"], "to": ["E", "I", "I"], "label": r"$k_{off}$"},
+        "k3": {"value": kinactf, "from": ["E_I","E_I","E_I"], "to": ["7EI"]}, #irrev step
+        "k4": {"value": kinactb, "from": ["7EI"], "to": ["E_I","E_I","E_I"]},
     },
 }
-schemes=gekim.utils.assign_colors_to_species(schemes,saturation_range=(0.5,0.8),lightness_range=(0.4,0.5),overwrite_existing=False)
 
-t = np.linspace(0.0001, 10000, 10000)
+gk.utils.Plotting.assign_colors_to_species(schemes,saturation_range=(0.5,0.8),lightness_range=(0.4,0.5),overwrite_existing=False,seed=1)
 
-model = gekim.NState(schemes["3S"])
-model.simulate_deterministic(t)
-kobs=gekim.utils.fit_occupancy(t,model,occ_fit_type="CO")
+# Hardcoded 3S systems 
+class ThreeStateVani():
+    def __init__(self,Ki,koff,kinactf,kinactb,conc0Arr):
+        self.Ki = Ki
+        self.koff = koff
+        self.kon = self.koff / Ki
+        self.kinactf=kinactf
+        self.kinactb=kinactb
+        self.conc0Arr = conc0Arr
+        self.sol=None
 
-fig = plt.figure(figsize=(5, 3))
-plt.title("3S")
-plt.plot(t, np.sum(model.traj_deterministic[:, 2:], axis=1),label='All Bound States',color="grey")
-for species, props in model.species.items():
-    if species == "I":
-        continue
-    plt.plot(t, model.traj_deterministic[:, model.species_order[species]], label=props['label'],color=schemes["3S"]["species"][species]["color"])
+    @staticmethod
+    def dcdt(t,concArr, params):
+        kon,koff,kinactf,kinactb=params
+        I, E, E_I, EI  = concArr
+        dLdt = koff*E_I - kon*I*E
+        dPdt = koff*E_I - kon*I*E 
+        dE_Idt = kon*I*E - koff*E_I - kinactf*E_I + kinactb*EI
+        dEIdt = kinactf*E_I - kinactb*EI
+        return [dLdt, dPdt, dE_Idt, dEIdt]
+        
+    def solve(self, t):
+        t_span = (t[0], t[-1])
+        params = (self.kon, self.koff, self.kinactf, self.kinactb)
+        solution = solve_ivp(self.dcdt, t_span, self.conc0Arr, t_eval=t, args=(params,), method='BDF', rtol=1e-6, atol=1e-8)
+        return solution.y.T
 
-plt.plot(t, gekim.utils.occFromKobs(t,kobs,schemes["3S"]["species"]["E"]["conc"]),label=r"$k_{\text{obs}}$ = "+str(gekim.utils.round_sig(kobs,3))+r" $\text{s}^{-1}$",ls='--', color="black")
+class ThreeStateMod1dot1():
+    def __init__(self,Ki,koff,kinactf,kinactb,conc0Arr):
+        self.Ki = Ki
+        self.koff = koff
+        self.kon = self.koff / Ki
+        self.kinactf=kinactf
+        self.kinactb=kinactb
+        self.conc0Arr = conc0Arr
+        self.sol=None
 
-plt.xlabel('Time (s)')
-plt.ylabel('Concentration (nM)')
-plt.legend(frameon=False)
+    @staticmethod
+    def dcdt(t,concArr, params):
+        kon,koff,kinactf,kinactb=params
+        I, E, E_I, EI  = concArr
+        dLdt = 2*koff*E_I - 2*kon*(I**2)*E
+        dPdt = koff*E_I - kon*(I**2)*E 
+        dE_Idt = kon*(I**2)*E - koff*E_I - 3*kinactf*(E_I**3) + 3*kinactb*(EI**7)
+        dEIdt = 7*kinactf*(E_I**3) - 7*kinactb*(EI**7)
+        return [dLdt, dPdt, dE_Idt, dEIdt]
+        
+    def solve(self, t):
+        t_span = (t[0], t[-1])
+        params = (self.kon, self.koff, self.kinactf, self.kinactb)
+        solution = solve_ivp(self.dcdt, t_span, self.conc0Arr, t_eval=t, args=(params,), method='BDF', rtol=1e-6, atol=1e-8)
+        return solution.y.T
 
-plt.show()
+class ThreeStateMod1dot2():
+    def __init__(self,Ki,koff,kinactf,kinactb,conc0Arr):
+        self.Ki = Ki
+        self.koff = koff
+        self.kon = self.koff / Ki
+        self.kinactf=kinactf
+        self.kinactb=kinactb
+        self.conc0Arr = conc0Arr
+        self.sol=None
+
+    @staticmethod
+    def dcdt(t,concArr, params):
+        kon,koff,kinactf,kinactb=params
+        I, E, E_I, EI  = concArr
+        dLdt = koff*E_I + koff*E_I - kon*I*I*E - kon*I*I*E
+        dPdt = koff*E_I - kon*I*I*E 
+        dE_Idt = kon*I*I*E - koff*E_I - kinactf*E_I*E_I*E_I - kinactf*E_I*E_I*E_I - kinactf*E_I*E_I*E_I + kinactb*(EI**7) + kinactb*(EI**7) + kinactb*(EI**7)
+        dEIdt = 7*kinactf*E_I*E_I*E_I - 7*kinactb*(EI**7)
+        return [dLdt, dPdt, dE_Idt, dEIdt]
+        
+    def solve(self, t):
+        t_span = (t[0], t[-1])
+        params = (self.kon, self.koff, self.kinactf, self.kinactb)
+        solution = solve_ivp(self.dcdt, t_span, self.conc0Arr, t_eval=t, args=(params,), method='BDF', rtol=1e-6, atol=1e-8)
+        return solution.y.T
+
+
+def compare_dictionaries(dict1, dict2, tol=1e-9):
+    if dict1.keys() != dict2.keys():
+        return False
+    for key in dict1:
+        if not np.isclose(dict1[key], dict2[key], rel_tol=tol):
+            return False
+    return True
+
+# Solve hardcoded systems
+def solve_system(system,t,concE0):
+    sol = system.solve(t)
+    final_state = sol[:,-1]
+    fit_output = ci.kobs_avail_fit_to_occ_final_wrt_t(
+        t,final_state,nondefault_params={"Etot":{"fix":concE0}})
+    system_dict = {
+        "system": system,
+        "sol": sol,
+        "final_state": final_state,
+        "fit_output": fit_output
+    }
+    return system_dict
+
+conc0Arr = [concI0,concE0,0,0]
+hardcoded_vani = ThreeStateVani(Kd,koff,kinactf,kinactb,conc0Arr)
+vani_dict = solve_system(hardcoded_vani,t,concE0)
+hardcoded_mod1dot1 = ThreeStateMod1dot1(Kd,koff,kinactf,kinactb,conc0Arr)
+mod1dot1_dict = solve_system(hardcoded_mod1dot1,t,concE0)
+hardcoded_mod1dot2 = ThreeStateMod1dot2(Kd,koff,kinactf,kinactb,conc0Arr)
+mod1dot2_dict = solve_system(hardcoded_mod1dot2,t,concE0)
+
+# Solve gekim systems 
+for name,scheme in schemes.items():
+    system = gk.schemes.NState(scheme,quiet=True)
+    sol = system.simulate_deterministic(t,output_raw=True)
+    final_state = system.species["EI"]['conc']
+    all_bound = system.sum_conc(blacklist=["E","I"])
+    fit_output = ci.kobs_avail_fit_to_occ_final_wrt_t(
+        t,final_state,nondefault_params={"Etot":{"fix":concE0}})
+    schemes[name]["fit_output"] = fit_output
+    schemes[name]["sol"] = sol
+    
+    if PLOT:
+        fig = plt.figure(figsize=(5, 3))
+
+        # Time course of species 
+        for species, props in system.species.items():
+            if species == "I":
+                continue
+            plt.plot(t, props['conc'], label=props['label'],color=props["color"])
+
+        # All bound states
+        all_bound = system.sum_conc(blacklist=["E","I"])
+        plt.plot(t, all_bound,label='All Bound States',color="grey")
+
+        # Fitted data
+        plt.plot(t,  fit_output.fitted_data,label=r"New Fit: $k_{\text{obs}}$ = "+
+                 str(gk.utils.round_sig(fit_output.fitted_params["kobs"],3))+r" $\text{s}^{-1}$",ls='--', color="black")
+
+        plt.xlabel('Time (s)')
+        plt.ylabel('Concentration (nM)')
+        plt.legend(frameon=False)
+        plt.show()
+
+def compare_systems(sys1_label,sys1_dict, sys2_label,sys2_dict, t):
+    if np.allclose(sys1_dict["sol"], sys2_dict["sol"],rtol=1e-6) and \
+        gk.utils.compare_dictionaries(sys1_dict["fit_output"].fitted_params,sys2_dict["fit_output"].fitted_params,rel_tol=1e-6):
+        print(f"GOOD: SOLUTION MATCH: {sys1_label} and {sys2_label}","\n")
+    else:
+        print(f"BAD: SOLUTION MISMATCH: {sys1_label} and {sys2_label}")
+        print(f"{sys1_label}:\n",sys1_dict["sol"],"\n",sys1_dict["fit_output"].fitted_params)
+        print(f"{sys2_label}:\n",sys2_dict["sol"],"\n",sys2_dict["fit_output"].fitted_params)
+        print("\n")
+        fig, axs = plt.subplots(2, 1, figsize=(8, 6))
+
+        #axs[0].plot(t, sys1_dict["sol"][:, 0], label="I")
+        axs[0].plot(t, sys1_dict["sol"][:, 1], label="E")
+        axs[0].plot(t, sys1_dict["sol"][:, 2], label="E_I")
+        axs[0].plot(t, sys1_dict["sol"][:, 3], label="EI")
+        axs[0].set_xlabel("Time (s)")
+        axs[0].set_ylabel("Concentration (nM)")
+        axs[0].set_title(sys1_label)
+        axs[0].legend()
+
+        #axs[1].plot(t, sys2_dict["sol"][:, 0], label="I")
+        axs[1].plot(t, sys2_dict["sol"][:, 1], label="E")
+        axs[1].plot(t, sys2_dict["sol"][:, 2], label="E_I")
+        axs[1].plot(t, sys2_dict["sol"][:, 3], label="EI")
+        axs[1].set_xlabel("Time (s)")
+        axs[1].set_ylabel("Concentration (nM)")
+        axs[1].set_title(sys2_label)
+        axs[1].legend()
+
+        plt.tight_layout()
+        plt.show()
+
+compare_systems("vani hardcoded", vani_dict, "vani gekim", schemes["3S_vani"], t)
+compare_systems("mod1.1 hardcoded", mod1dot1_dict, "mod1.1 gekim", schemes["3S_mod1.1"], t)
+compare_systems("mod1.2 hardcoded", mod1dot2_dict, "mod1.2 gekim", schemes["3S_mod1.2"], t)
+compare_systems("mod1.1 gekim", schemes["3S_mod1.1"], "mod1.2 gekim", schemes["3S_mod1.2"], t)
+
+
+
+    

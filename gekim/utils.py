@@ -1,4 +1,3 @@
-from scipy.optimize import curve_fit
 import numpy as np
 import math
 import colorsys
@@ -36,18 +35,37 @@ def round_sig(num, sig_figs, autoformat=True):
         return result
 
 class Plotting:
-    def assign_colors_to_species(schemes, saturation_range=(0.5, 0.7), lightness_range=(0.3, 0.4), method=None, offset=0, overwrite_existing=False):
+    def assign_colors_to_species(schemes, saturation_range=(0.5, 0.7), lightness_range=(0.3, 0.4), method=None, offset=0, overwrite_existing=False, seed=None):
         """
-        Assigns a distinct and aesthetically distributed color to each species in the provided dictionary of kinetic schemes. 
-        Uses the golden ratio for even hue distribution.
-        Method can be "GR" to use the golden ratio to generate the hues.
-        Offset can be used to offset the hues.
-        overwrite_existing: If True, overwrite existing colors; if False, assign colors only to species without colors.
+        Assigns a distinct and aesthetically pleasing color to each species in a dictionary or a single kinetic scheme.
+        Uses either a fixed or golden ratio based distribution for hues. Optionally seeds the randomness for consistent results.
+        Parameters:
+            schemes (dict): Dictionary of kinetic scheme dictionaries or a single kinetic scheme dictionary.
+            saturation_range (tuple): Min and max saturation values.
+            lightness_range (tuple): Min and max lightness values.
+            method (str): "GR" for golden ratio hue distribution; None for linear distribution.
+            offset (float): Offset value for the hues.
+            overwrite_existing (bool): If True, overwrite existing colors; if False, assign colors only to species without colors.
+            seed (int): Seed for random number generator for reproducible color variations.
+        Returns:
+            dict: Updated schemes with assigned colors. Edits original input dict.
         """
-        #TODO: This only works with a dictionary of schemes. It should work on single schemes too
-        unique_species = set()
+        if not isinstance(schemes, dict):
+            raise ValueError("Input should be a dictionary of schemes or a single scheme formatted as a dictionary.")
+        
+        single_scheme = False
+        if 'species' in next(iter(schemes.keys())):
+            single_scheme = True
+            schemes = {'single_scheme': schemes}
+
+        # Retrieve unique species into a list. Don't use a set to preserve order.
+        unique_species = []
+        seen_species = set()
         for scheme in schemes.values():
-            unique_species.update(scheme["species"].keys())
+            for species in scheme["species"].keys():
+                if species not in seen_species:
+                    unique_species.append(species)
+                    seen_species.add(species)
 
         golden_ratio_conjugate = 0.618033988749895
         hue = 0
@@ -62,10 +80,9 @@ class Plotting:
                 for scheme in schemes.values():
                     if species in scheme["species"] and "color" in scheme["species"][species]:
                         color_mapping[species] = scheme["species"][species]["color"]
-                        break # Keep first match
-                
+                        break
+
         for i, species in enumerate(unique_species):
-            # Skip species with existing color unless overwriting
             if not overwrite_existing and species in color_mapping:
                 continue
 
@@ -75,8 +92,11 @@ class Plotting:
                 hue = hues[i] + offset
             hue %= 1
 
+            np.random.seed(seed) # seed=None will try to read data from /dev/urandom (or the Windows analogue) if available or seed from the clock otherwise
             lightness = np.random.uniform(*lightness_range)
+            np.random.seed(seed)
             saturation = np.random.uniform(*saturation_range)
+
             r, g, b = colorsys.hls_to_rgb(hue, lightness, saturation)
             hex_color = f'#{int(r * 255):02x}{int(g * 255):02x}{int(b * 255):02x}'
             color_mapping[species] = hex_color
@@ -86,6 +106,8 @@ class Plotting:
                 if overwrite_existing or "color" not in scheme["species"][species]:
                     scheme["species"][species]["color"] = color_mapping.get(species, scheme["species"][species].get("color"))
 
+        if single_scheme:
+            schemes = schemes['single_scheme']
         return schemes
 
 def _update_dict_with_subset(defaults: dict, updates: dict):
@@ -111,6 +133,20 @@ def _update_dict_with_subset(defaults: dict, updates: dict):
 
     return defaults
 
+def compare_dictionaries(dict1, dict2, rel_tol=1e-9, abs_tol=0.0):
+    if dict1.keys() != dict2.keys():
+        return False
 
+    for key in dict1:
+        value1, value2 = dict1[key], dict2[key]
+        if isinstance(value1, dict) and isinstance(value2, dict):
+            # Recursive call for nested dictionaries
+            if not compare_dictionaries(value1, value2, rel_tol, abs_tol):
+                return False
+        else:
+            arr1, arr2 = np.array(value1), np.array(value2)
+            if not np.allclose(arr1, arr2, rtol=rel_tol, atol=abs_tol):
+                return False
+    return True
 
 

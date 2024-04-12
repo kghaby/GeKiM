@@ -7,7 +7,7 @@ from scipy.integrate import solve_ivp
 # Test whether gekim NState systems yield the same output as hardcoded systems
 
 # User option to plot time course of NState systems (will still plot on mismatch)
-PLOT=True
+PLOT=False
 
 # Params
 Kd = 10 #nM, koff/kon
@@ -90,7 +90,7 @@ class ThreeStateVani():
         t_span = (t[0], t[-1])
         params = (self.kon, self.koff, self.kinactf, self.kinactb)
         solution = solve_ivp(self.dcdt, t_span, self.conc0Arr, t_eval=t, args=(params,), method='BDF', rtol=1e-6, atol=1e-8)
-        return solution.y.T
+        return solution
 
 class ThreeStateMod1dot1():
     def __init__(self,Ki,koff,kinactf,kinactb,conc0Arr):
@@ -116,7 +116,7 @@ class ThreeStateMod1dot1():
         t_span = (t[0], t[-1])
         params = (self.kon, self.koff, self.kinactf, self.kinactb)
         solution = solve_ivp(self.dcdt, t_span, self.conc0Arr, t_eval=t, args=(params,), method='BDF', rtol=1e-6, atol=1e-8)
-        return solution.y.T
+        return solution
 
 class ThreeStateMod1dot2():
     def __init__(self,Ki,koff,kinactf,kinactb,conc0Arr):
@@ -142,7 +142,7 @@ class ThreeStateMod1dot2():
         t_span = (t[0], t[-1])
         params = (self.kon, self.koff, self.kinactf, self.kinactb)
         solution = solve_ivp(self.dcdt, t_span, self.conc0Arr, t_eval=t, args=(params,), method='BDF', rtol=1e-6, atol=1e-8)
-        return solution.y.T
+        return solution
 
 
 def compare_dictionaries(dict1, dict2, tol=1e-9):
@@ -156,7 +156,7 @@ def compare_dictionaries(dict1, dict2, tol=1e-9):
 # Solve hardcoded systems
 def solve_system(system,t,concE0):
     sol = system.solve(t)
-    final_state = sol[:,-1]
+    final_state = sol.y[-1]
     fit_output = ci.kobs_avail_fit_to_occ_final_wrt_t(
         t,final_state,nondefault_params={"Etot":{"fix":concE0}})
     system_dict = {
@@ -209,7 +209,7 @@ for name,scheme in schemes.items():
         plt.show()
 
 def compare_systems(sys1_label,sys1_dict, sys2_label,sys2_dict, t):
-    if np.allclose(sys1_dict["sol"], sys2_dict["sol"],rtol=1e-6) and \
+    if np.allclose(sys1_dict["sol"].y, sys2_dict["sol"].y,rtol=1e-6) and \
         gk.utils.compare_dictionaries(sys1_dict["fit_output"].fitted_params,sys2_dict["fit_output"].fitted_params,rel_tol=1e-6):
         print(f"GOOD: SOLUTION MATCH: {sys1_label} and {sys2_label}","\n")
     else:
@@ -219,19 +219,19 @@ def compare_systems(sys1_label,sys1_dict, sys2_label,sys2_dict, t):
         print("\n")
         fig, axs = plt.subplots(2, 1, figsize=(8, 6))
 
-        #axs[0].plot(t, sys1_dict["sol"][:, 0], label="I")
-        axs[0].plot(t, sys1_dict["sol"][:, 1], label="E")
-        axs[0].plot(t, sys1_dict["sol"][:, 2], label="E_I")
-        axs[0].plot(t, sys1_dict["sol"][:, 3], label="EI")
+        #axs[0].plot(t, sys1_dict["sol"][0], label="I")
+        axs[0].plot(t, sys1_dict["sol"].y[1], label="E")
+        axs[0].plot(t, sys1_dict["sol"].y[2], label="E_I")
+        axs[0].plot(t, sys1_dict["sol"].y[3], label="EI")
         axs[0].set_xlabel("Time (s)")
         axs[0].set_ylabel("Concentration (nM)")
         axs[0].set_title(sys1_label)
         axs[0].legend()
 
-        #axs[1].plot(t, sys2_dict["sol"][:, 0], label="I")
-        axs[1].plot(t, sys2_dict["sol"][:, 1], label="E")
-        axs[1].plot(t, sys2_dict["sol"][:, 2], label="E_I")
-        axs[1].plot(t, sys2_dict["sol"][:, 3], label="EI")
+        #axs[1].plot(t, sys2_dict["sol"][0], label="I")
+        axs[1].plot(t, sys2_dict["sol"].y[1], label="E")
+        axs[1].plot(t, sys2_dict["sol"].y[2], label="E_I")
+        axs[1].plot(t, sys2_dict["sol"].y[3], label="EI")
         axs[1].set_xlabel("Time (s)")
         axs[1].set_ylabel("Concentration (nM)")
         axs[1].set_title(sys2_label)

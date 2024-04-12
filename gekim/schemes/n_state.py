@@ -126,7 +126,7 @@ class NState:
             raise ValueError("Provide either a whitelist or a blacklist, not both.")
 
         species_names = self.species.keys()
-
+        
         if whitelist:
             species_names = [name for name in whitelist if name in species_names]
         elif blacklist:
@@ -263,7 +263,7 @@ class NState:
 
         rtol (float): Relative tolerance for the solver. Default is 1e-6
         atol (float): Absolute tolerance for the solver. Default is 1e-8
-        output_raw (bool): If True, return raw solution.y.T array. Each column is a species.
+        output_raw (bool): If True, return raw solver output. 
 
         Returns:
         Dict or None, depending on output_mode.
@@ -282,12 +282,12 @@ class NState:
 
             self.t = t
             for name,data in self.species.items():
-                data['conc'] = solution.y[data['index']].T
+                data['conc'] = solution.y[data['index']]
 
             self.logger.info("ODEs solved successfully.")
 
             if output_raw:
-                return solution.y.T
+                return solution
             else:
                 return
         except Exception as e:
@@ -305,7 +305,7 @@ class NState:
 
         rtol (float): Relative tolerance for the solver. Default is 1e-6
         atol (float): Absolute tolerance for the solver. Default is 1e-8
-        output_raw (bool): If True, return raw solution data. Concentrations will be in solution.y.T
+        output_raw (bool): If True, return raw solver output. 
 
         Returns:
         Dict or None, depending on output_mode.
@@ -328,7 +328,7 @@ class NState:
 
             self.t = t
             for name,data in self.species.items():
-                data['conc'] = solution.y[data['index']].T
+                data['conc'] = solution.y[data['index']]
 
             self.logger.info("ODEs solved successfully.")
 
@@ -341,6 +341,7 @@ class NState:
             raise
 
     def simulate_stochastic(self):
+        
         raise NotImplementedError("TODO: Gillespie alg")
 
 

@@ -25,10 +25,10 @@ import gekim as gk
 from gekim.analysis import covalent_inhibition as ci
 
 # Define your kinetic scheme in a configuration dictionary
-concE0 = 1
-config = {
+concI0,concE0 = 100,1
+scheme = {
     'species': {
-        "I": {"conc": 100, "label": "$I$"},
+        "I": {"conc": concI0, "label": "$I$"},
         "E": {"conc": concE0, "label": "$E$"},
         "EI": {"conc": 0, "label": "$EI$"},
     },    
@@ -39,11 +39,11 @@ config = {
 }
 
 # Create a model
-model = gk.scheme.NState(config)
+system = gk.scheme.NState(scheme)
 
 # Define time points and simulate. In this example we're doing a deterministic simulation of the concentrations of each species. 
 t = np.linspace(0.0001, 1000, 10)
-model.simulate_deterministic(t)
+system.simulate_deterministic(t)
 
 # Fit the data to experimental models to extract mock-experimental measurements
 final_state = system.species["EI"]['conc']

@@ -4,35 +4,11 @@ import copy
 import logging
 import sys
 from scipy.integrate import solve_ivp
-from numba import njit
-from ..fortran.kinetics import kinetics
-
-@njit
-def _dcdt(t, concentrations, rate_constants, stoich_matrix_from, stoich_matrix_to,num_reactions):
-    """
-    Compute the derivative of concentrations with respect to time.
-
-    Parameters:
-    t (float): Time.
-    concentrations (numpy.array): Array of species concentrations.
-
-    Returns:
-    numpy.array: Array of concentration time derivatives.
-    """
-    dcdt_arr = np.zeros_like(concentrations)
-    for i in range(num_reactions):
-        rate = rate_constants[i]
-        reactant_mask = stoich_matrix_from[:, i] > 0
-        for j, is_reactant in enumerate(reactant_mask):
-            if is_reactant:
-                rate *= concentrations[j] ** stoich_matrix_from[j, i]
-        net_change = stoich_matrix_to[:, i] - stoich_matrix_from[:, i]
-        dcdt_arr += rate * net_change
-    return dcdt_arr
         
 class NState:
     #TODO: Make sure its all np arrays and not lists 
     #TODO: Add stochastic method
+    #TODO: logger retains previous classes? Jupyter output was showing previous class logs i think
     
     def __init__(self, config, logfilename=None, quiet=False):
         """
@@ -76,8 +52,8 @@ class NState:
         self._preprocess_transitions()
 
         self.t = None
-        self._rate_constants = np.array([tr['value'] for tr in self.transitions.values()])
-        self._stoich_matrix_from, self._stoich_matrix_to = self._build_stoichiometry_matrix()
+        #self._rate_constants = np.array([tr['value'] for tr in self.transitions.values()])
+        #self._stoich_matrix_from, self._stoich_matrix_to = self._build_stoichiometry_matrix()
         
         self.logger.info(f"NState system initialized successfully.")
 
@@ -136,15 +112,6 @@ class NState:
 
         return total_concentration
 
-
-    def _preprocess_transitions(self):
-        """
-        Preprocess the transitions by extracting coefficients and species names.
-        """
-        for _, tr in self.transitions.items():
-            tr['from'] = [self._identify_coeff(s) for s in tr['from']]
-            tr['to'] = [self._identify_coeff(s) for s in tr['to']]
-
     @staticmethod
     def _identify_coeff(species_str):
         """
@@ -157,9 +124,66 @@ class NState:
         tuple: A tuple of coefficient (int) and species name (str).
         """
         match = re.match(r"(\d*)(\D.*)", species_str)
-        coeff = int(match.groups()[0]) if match and match.groups()[0] else 1
+        if match and match.groups()[0]:
+            if float(int(float(match.groups()[0])) == float(match.groups()[0])): # Lets "5.0" be a valid stoich coeff
+                coeff = int(match.groups()[0])
+            else:
+                raise ValueError(f"Invalid coefficient '{match.groups()[0]}' in species string '{species_str}'.")
+        else:
+            coeff = 1
         name = match.groups()[1] if match else species_str
-        return coeff, name
+        return name,coeff
+                
+    def _preprocess_transitions(self):
+        """
+        Preprocess the transitions by extracting coefficients and species names.
+        """
+        for _, tr in self.transitions.items():
+            tr['from_idx'] = [(self.species[name]['index'], coeff) for name, coeff in (self._identify_coeff(sp) for sp in tr['from'])]
+            tr['from'] = [(name, coeff) for name, coeff in (self._identify_coeff(sp) for sp in tr['from'])]
+            tr['to_idx'] = [(self.species[name]['index'], coeff) for name, coeff in (self._identify_coeff(sp) for sp in tr['to'])]
+            tr['to'] = [(name, coeff) for name, coeff in (self._identify_coeff(sp) for sp in tr['to'])]
+    
+
+    def _construct_ode_matrix(self):
+        """Constructs the ODE matrix for the system's kinetics."""
+        n_species = len(self.species)
+        ode_matrix = np.zeros((n_species, n_species))
+
+        for tr in self.transitions.values():
+            rate_constant = tr['value']
+            for from_idx, coeff in tr['from_idx']:
+                ode_matrix[from_idx, from_idx] -= coeff * rate_constant
+                for to_idx, coeff_to in tr['to_idx']:
+                    ode_matrix[to_idx, from_idx] += coeff * rate_constant
+
+        return ode_matrix
+    
+    def simulate_deterministic_matrix(self, t, method='BDF', rtol=1e-6, atol=1e-8, output_raw=False):
+        """Simulates the system deterministically using the ODE matrix."""
+        conc0 = np.array([np.atleast_1d(sp['conc'])[0] for _, sp in self.species.items()])
+        self.log_dcdts()
+        ode_matrix = self._construct_ode_matrix()
+        #print(ode_matrix)
+
+        def dcdt_matrix(t, conc_vector):
+            return ode_matrix @ conc_vector
+
+        solution = solve_ivp(dcdt_matrix, (t[0], t[-1]), conc0, method=method, t_eval=t, rtol=rtol, atol=atol)
+        if not solution.success:
+            raise RuntimeError("ODE solver failed: " + solution.message)
+
+        # Update species concentrations
+        self.t = t
+        for name,data in self.species.items():
+            data['conc'] = solution.y[data['index']]
+
+        self.logger.info("ODEs solved successfully.")
+
+        if output_raw:
+            return solution
+        else:
+            return
     
     def _build_stoichiometry_matrix(self):
         num_species = len(self.species)
@@ -169,12 +193,12 @@ class NState:
         
         for tr_idx, (tr_name, tr) in enumerate(self.transitions.items()):
             for reactant in tr['from']:
-                coeff, name = reactant
+                name,coeff = reactant
                 sp_idx = self.species[name]['index']
                 stoich_matrix_from[sp_idx, tr_idx] = coeff
             
             for product in tr['to']:
-                coeff, name = product
+                name,coeff = product
                 sp_idx = self.species[name]['index']
                 stoich_matrix_to[sp_idx, tr_idx] = coeff
         #net_stoich_matrix = (stoich_matrix_from - stoich_matrix_to)
@@ -183,8 +207,8 @@ class NState:
 
     def _dcdt(self, t, concentrations):
         """
-        Slightly slower than vectorized algorithm due to more rigorous iteration.
         Compute the derivative of concentrations with respect to time.
+        Can directly handle non-linear reactions (eg stoich coeff > 1)
 
         Parameters:
         t (float): Time.
@@ -197,12 +221,12 @@ class NState:
         dcdt_arr = np.zeros_like(concentrations)
         for tr in self.transitions.values():
             rate_constant = tr['value']
-            rate = rate_constant * np.prod([concentrations[self.species[sp_name]['index']] ** coeff for coeff, sp_name in tr['from']])
+            rate = rate_constant * np.prod([concentrations[self.species[sp_name]['index']] ** coeff for sp_name,coeff in tr['from']])
             # Iterating through like this is beneficial because it captures stoichiometry that is evident in the list rather than coefficient 
                 # (eg "from": ["E","E", "I"] is equal to "from": ["2E", "I"])
-            for coeff, sp_name in tr['from']:
+            for sp_name,coeff in tr['from']:
                 dcdt_arr[self.species[sp_name]['index']] -= coeff * rate
-            for coeff, sp_name in tr['to']:
+            for sp_name,coeff in tr['to']:
                 dcdt_arr[self.species[sp_name]['index']] += coeff * rate
         return dcdt_arr
         
@@ -224,15 +248,15 @@ class NState:
 
         for tr_name, tr in self.transitions.items():
             # Write rate law
-            rate = f"{tr_name} * " + " * ".join([f"{sp_name}^{coeff}" if coeff > 1 else f"{sp_name}" for coeff, sp_name in tr['from']])
+            rate = f"{tr_name} * " + " * ".join([f"{sp_name}^{coeff}" if coeff > 1 else f"{sp_name}" for sp_name,coeff in tr['from']])
             rate = rate.rstrip(" *")  # Remove trailing " *"
 
             # Add rate law to the eqns
-            for coeff, sp_name in tr['from']:
+            for sp_name,coeff in tr['from']:
                 term = f"{coeff} * {rate}" if coeff > 1 else rate
                 dcdt_dict[sp_name].append(f" - {term}")
 
-            for coeff, sp_name in tr['to']:
+            for sp_name,coeff in tr['to']:
                 term = f"{coeff} * {rate}" if coeff > 1 else rate
                 dcdt_dict[sp_name].append(f" + {term}")
 
@@ -294,52 +318,6 @@ class NState:
             self.logger.error(f"Error in solving ODEs: {e}")
             raise
     
-    def _simulate_deterministic(self, t, method='BDF', rtol=1e-6, atol=1e-8, output_raw=False):
-        """
-        Uses fortran to calc ODE set. A tad slower.
-        Solve the ODEs for the system with flexible output handling.
-
-        Parameters:
-        t (np.array): Time points for ODE solutions.
-        method (str): Integration method, default is 'BDF'.
-
-        rtol (float): Relative tolerance for the solver. Default is 1e-6
-        atol (float): Absolute tolerance for the solver. Default is 1e-8
-        output_raw (bool): If True, return raw solver output. 
-
-        Returns:
-        Dict or None, depending on output_mode.
-        """
-        def odes(t, conc):
-            dcdt = np.zeros_like(conc)  # dcdt also needs to be of dtype=np.float32 to match Fortran expectations
-            kinetics.calc_dcdt(conc, self._rate_constants, self._stoich_matrix_from, self._stoich_matrix_to, dcdt, num_species)
-            return dcdt
-        conc0 = np.array([np.atleast_1d(sp['conc'])[0] for _, sp in self.species.items()])
-        t_span = (t[0], t[-1])
-        self.log_dcdts()
-        num_species = len(self.species)
-        try:
-            solution = solve_ivp(
-                fun=odes,
-                t_span=t_span, y0=conc0, t_eval=t, method=method, rtol=rtol, atol=atol
-            )
-            if not solution.success:
-                raise RuntimeError("ODE solver failed: " + solution.message)
-
-            self.t = t
-            for name,data in self.species.items():
-                data['conc'] = solution.y[data['index']]
-
-            self.logger.info("ODEs solved successfully.")
-
-            if output_raw:
-                return solution
-            else:
-                return
-        except Exception as e:
-            self.logger.error(f"Error in solving ODEs: {e}")
-            raise
-
     def simulate_stochastic(self, t, output_raw=False):
         """
         Simulate the system stochastically using the Gillespie algorithm.
@@ -362,7 +340,7 @@ class NState:
         while current_time < t[-1]:
             rate = np.zeros(len(transitions_list))
             for tr_idx, tr in enumerate(transitions_list):
-                tr_rate = tr['value'] * np.prod([conc[self.species[sp_name]['index']] ** coeff for coeff, sp_name in tr['from']])
+                tr_rate = tr['value'] * np.prod([conc[self.species[sp_name]['index']] ** coeff for sp_name,coeff in tr['from']])
                 rate[tr_idx] = tr_rate
 
             total_rate = np.sum(rate)

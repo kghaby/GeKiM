@@ -340,9 +340,75 @@ class NState:
             self.logger.error(f"Error in solving ODEs: {e}")
             raise
 
-    def simulate_stochastic(self):
-        
-        raise NotImplementedError("TODO: Gillespie alg")
+    def simulate_stochastic(self, t, output_raw=False):
+        """
+        Simulate the system stochastically using the Gillespie algorithm.
+
+        Parameters:
+        t (np.array): Time points for desired observations.
+        output_raw (bool): If True, return raw simulation data.
+
+        Returns:
+        Dict or None, depending on output_mode.
+        """
+        # Initialize
+        current_time = 0.0
+        conc = np.array([np.atleast_1d(sp['conc'])[0] for _, sp in self.species.items()])
+        times = [current_time]
+        concentrations = [conc.copy()]
+        transitions_list = list(self.transitions.values())  # Convert dictionary values to a list for indexing
+
+        # Simulation loop
+        while current_time < t[-1]:
+            rate = np.zeros(len(transitions_list))
+            for tr_idx, tr in enumerate(transitions_list):
+                tr_rate = tr['value'] * np.prod([conc[self.species[sp_name]['index']] ** coeff for coeff, sp_name in tr['from']])
+                rate[tr_idx] = tr_rate
+
+            total_rate = np.sum(rate)
+            if total_rate == 0:
+                break
+
+            # Time to next event
+            tau = np.random.exponential(1/total_rate)
+            current_time += tau
+            if current_time > t[-1]:
+                break
+
+            # Determine which event occurs
+            cumulative_rate = np.cumsum(rate)
+            event = np.searchsorted(cumulative_rate, np.random.rand() * total_rate)
+
+            # Update concentrations
+            for coeff, sp_name in transitions_list[event]['from']:
+                conc[self.species[sp_name]['index']] -= coeff
+            for coeff, sp_name in transitions_list[event]['to']:
+                conc[self.species[sp_name]['index']] += coeff
+
+            times.append(current_time)
+            concentrations.append(conc.copy())
+
+        # Interpolate or sample to requested time points
+        interpolated_concs = np.zeros((len(self.species), len(t)))
+        j = 0
+        for i, desired_time in enumerate(t):
+            while j < len(times) - 1 and times[j+1] < desired_time:
+                j += 1
+            interpolated_concs[:, i] = concentrations[j]
+
+        # Logging
+        self.logger.info("Stochastic simulation completed successfully.")
+
+        if output_raw:
+            return {'time': np.array(times), 'concentrations': np.array(concentrations)}
+        else:
+            # Format output to match deterministic function if needed
+            solution = {'time': t, 'concentrations': interpolated_concs}
+            for idx, sp in enumerate(self.species.keys()):
+                self.species[sp]['conc'] = solution['concentrations'][idx]
+            return solution
+
+
 
 
 

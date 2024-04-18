@@ -53,7 +53,7 @@ class NState:
         self._preprocess_transitions()
         self._construct_matrices()
         self._construct_ode_mat()
-        self.Y = np.abs(self._stoich_mat.clip(max=0))
+
         self.t = None
         
         self.logger.info(f"NState system initialized successfully.")
@@ -134,8 +134,8 @@ class NState:
             for sp,coeff in tr['to']:
                 self._stoich_mat[tr_idx,sp_idx[sp]] += coeff
 
-        self._k_vec = np.diag(self._k_vec)
-        self._stoich_mat=self._stoich_mat.T
+        self._k_diag = np.diag(self._k_vec)
+        self._stoich_reactant_mat = np.abs(self._stoich_mat.clip(max=0))
 
 
 
@@ -144,12 +144,24 @@ class NState:
         print(reaction_rates)
         return self.stoich_mat @ reaction_rates
 
+    def _dcdt6(self, t, conc):
+        #TODO: transpose others instead of currently transposed. Construct stoich from complex vectors 
+        C_Nr = np.prod(np.power(conc, self._stoich_reactant_mat), axis=1)
+        N_K = np.dot(self._k_diag,self._stoich_mat)
+        dCdt = np.dot(C_Nr,N_K)
+        return dCdt
+
     def _dcdt5(self, t, conc):
         #TODO: transpose others instead of currently transposed. Construct stoich from complex vectors 
-        C = conc[:, np.newaxis]
-        CY = np.prod(np.power(C, self.Y), axis=0)
-        NK = np.dot(self._stoich_mat,self._k_vec)
-        dCdt = np.dot(NK,CY)
+        C = conc
+        C_Nr = np.prod(np.power(C, self._stoich_reactant_mat), axis=1)
+        print(C_Nr)
+        N_K = np.dot(self._k_diag,self._stoich_mat)
+        print(N_K)
+
+        dCdt = np.dot(C_Nr,N_K)
+        print(dCdt)
+        raise ValueError
         return dCdt
         #return np.dot(np.dot(self._stoich_mat,self._k_vec),np.prod(np.power(conc[:, np.newaxis], self.Y), axis=0))
 
@@ -242,7 +254,7 @@ class NState:
         conc0 = np.array([np.atleast_1d(sp['conc'])[0] for _, sp in self.species.items()])
         self.log_dcdts()
 
-        solution = solve_ivp(self._dcdt5, (t[0], t[-1]), conc0, method=method, t_eval=t, rtol=rtol, atol=atol)
+        solution = solve_ivp(self._dcdt6, (t[0], t[-1]), conc0, method=method, t_eval=t, rtol=rtol, atol=atol)
         if not solution.success:
             raise RuntimeError("ODE solver failed: " + solution.message)
 

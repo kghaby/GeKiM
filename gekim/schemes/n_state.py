@@ -49,11 +49,12 @@ class NState:
         self._validate_species()
 
         self.transitions = self.config['transitions']
+        
         self._preprocess_transitions()
-
+        self._construct_matrices()
+        self._construct_ode_mat()
+        self.Y = np.abs(self._stoich_mat.clip(max=0))
         self.t = None
-        #self._rate_constants = np.array([tr['value'] for tr in self.transitions.values()])
-        #self._stoich_matrix_from, self._stoich_matrix_to = self._build_stoichiometry_matrix()
         
         self.logger.info(f"NState system initialized successfully.")
 
@@ -86,34 +87,8 @@ class NState:
                 data['conc'] = np.array([conc])
         return True
                 
-    def sum_conc(self,whitelist:list=None,blacklist:list=None):
-        """
-        Sum the concentrations of specified species in the model.
-        Whitelist and blacklist cannot be provided simultaneously.
-
-        Parameters:
-        whitelist (list, optional): Names of species to include in the sum.
-        blacklist (list, optional): Names of species to exclude from the sum.
-
-        Returns:
-        float: The sum of the concentrations.
-        """
-        if whitelist and blacklist:
-            raise ValueError("Provide either a whitelist or a blacklist, not both.")
-
-        species_names = self.species.keys()
-        
-        if whitelist:
-            species_names = [name for name in whitelist if name in species_names]
-        elif blacklist:
-            species_names = [name for name in species_names if name not in blacklist]
-
-        total_concentration = np.sum([self.species[name]['conc'] for name in species_names], axis=0)
-
-        return total_concentration
-
     @staticmethod
-    def _identify_coeff(species_str):
+    def _parse_species_string(species_str):
         """
         Extract coefficient and species name from species string.
 
@@ -121,7 +96,7 @@ class NState:
         species_str (str): A species string, e.g., '2A'.
 
         Returns:
-        tuple: A tuple of coefficient (int) and species name (str).
+        tuple: A tuple of species name (str) and stoicheometric coefficient (int).
         """
         match = re.match(r"(\d*)(\D.*)", species_str)
         if match and match.groups()[0]:
@@ -139,37 +114,135 @@ class NState:
         Preprocess the transitions by extracting coefficients and species names.
         """
         for _, tr in self.transitions.items():
-            tr['from_idx'] = [(self.species[name]['index'], coeff) for name, coeff in (self._identify_coeff(sp) for sp in tr['from'])]
-            tr['from'] = [(name, coeff) for name, coeff in (self._identify_coeff(sp) for sp in tr['from'])]
-            tr['to_idx'] = [(self.species[name]['index'], coeff) for name, coeff in (self._identify_coeff(sp) for sp in tr['to'])]
-            tr['to'] = [(name, coeff) for name, coeff in (self._identify_coeff(sp) for sp in tr['to'])]
+            tr['from_idx'] = [(self.species[name]['index'], coeff) for name, coeff in (self._parse_species_string(sp) for sp in tr['from'])]
+            tr['from'] = [(name, coeff) for name, coeff in (self._parse_species_string(sp) for sp in tr['from'])]
+            tr['to_idx'] = [(self.species[name]['index'], coeff) for name, coeff in (self._parse_species_string(sp) for sp in tr['to'])]
+            tr['to'] = [(name, coeff) for name, coeff in (self._parse_species_string(sp) for sp in tr['to'])]
+
+    def _construct_matrices(self):
+        n_species = len(self.species)
+        n_transitions = len(self.transitions)
+        self._stoich_mat = np.zeros((n_transitions, n_species), dtype=int)  # Stoichiometry coefficients
+        self._k_vec = np.zeros(n_transitions)  # Rate constants
+
+        sp_idx = {name: idx for idx, name in enumerate(self.species)}
+
+        for tr_idx, (_,tr) in enumerate(self.transitions.items()):
+            self._k_vec[tr_idx] = tr['value']
+            for sp,coeff in tr['from']:
+                self._stoich_mat[tr_idx,sp_idx[sp]] -= coeff
+            for sp,coeff in tr['to']:
+                self._stoich_mat[tr_idx,sp_idx[sp]] += coeff
+
+        self._k_vec = np.diag(self._k_vec)
+        self._stoich_mat=self._stoich_mat.T
+
+
+
+    def dcdt2(self, t, concentrations):
+        reaction_rates = self.rate_constants * np.prod(np.power(np.maximum(concentrations, 0), self.stoich_mat.T.clip(min=0)), axis=1)
+        print(reaction_rates)
+        return self.stoich_mat @ reaction_rates
+
+    def _dcdt5(self, t, conc):
+        #TODO: transpose others instead of currently transposed. Construct stoich from complex vectors 
+        C = conc[:, np.newaxis]
+        CY = np.prod(np.power(C, self.Y), axis=0)
+        NK = np.dot(self._stoich_mat,self._k_vec)
+        dCdt = np.dot(NK,CY)
+        return dCdt
+        #return np.dot(np.dot(self._stoich_mat,self._k_vec),np.prod(np.power(conc[:, np.newaxis], self.Y), axis=0))
+
+    def _dcdt4(self, t, conc):
+        
+        R = self._stoich_mat.T
+        K = self._k_vec
+        X = conc[:, np.newaxis]
+        Y = np.abs(R.clip(max=0))
+        print(R)
+        print(X)
+        #print(Y)
+        XY=np.prod(np.power(X, Y), axis=0)
+        #print(XY)
+        RK = np.dot(R,np.diag(K))
+        #print(RK)
+        dXdt=np.dot(RK,XY)
+        #print(dXdt)
+        raise ValueError
+
+        #print(self._k_vec)
+        #print(np.diag(self._k_vec))
+        #print(self._stoich_mat)
+        #print(self._k_vec*self._stoich_mat)
+        mat=np.dot(np.diag(self._k_vec),self._stoich_mat) # produces ode_mat on linear system 
+        mat = np.array([    [ 0.,          0.        ,  0.        ],\
+                            [ 0.,         -0.02222222,  0.01111111],\
+                            [ 0.,          0.00222222, -0.00111111]])
+        print(mat) 
+        #print(np.sum(mat,axis=0))
+        #print(np.dot(self._k_vec,self._stoich_mat)) # produces collapsed ode_mat
+        #print(self._stoich_mat)
+        #print(conc)
+        C = np.power(conc, np.abs(self._stoich_mat.clip(max=0)))
+        print(C)
+        #print(mat*C)
+        print(np.dot(C,mat))
+
+        #M=self._stoich_mat*np.power(conc, np.abs(self._stoich_mat))
+        #print("M",M)
+        #print(np.dot(self._k_vec,M))
+        #print(np.dot(np.diag(self._k_vec),M))
+
+        #print(np.power(conc, np.abs(self._stoich_mat)))
+        #print(self._ode_mat)
+        #print(np.sum(self._ode_mat,axis=0))
+        #print(self._ode_mat.T * np.power(conc, np.abs(self._stoich_mat)))
+
+        #print(np.sum(self._ode_mat.T * np.power(conc, np.abs(self._stoich_mat)),axis=0))
+        raise ValueError
+        print(self._stoich_mat * self._k_vec[:, np.newaxis])
+        print(conc[np.newaxis, :] ** np.abs(self._stoich_mat))
+        print(self._stoich_mat * self._k_vec[:, np.newaxis] * conc[np.newaxis, :] ** np.abs(self._stoich_mat))
+        print(np.sum(self._stoich_mat * self._k_vec[:, np.newaxis] * conc[np.newaxis, :] ** np.abs(self._stoich_mat), axis=0))
+        raise ValueError
+        #k_conc_mat = self._k_vec * np.prod(np.power(conc, np.abs(self._stoich_mat)), axis=1
+        print(self._stoich_mat)
+        print(self._k_vec)
+        print(self._stoich_mat*self._k_vec)
+        print(conc[:, np.newaxis]**np.abs(self._stoich_mat))
+        print(self._stoich_mat*self._k_vec*conc[:, np.newaxis]**np.abs(self._stoich_mat))
+        print(np.sum(self._ode_mat.T*conc[:, np.newaxis]**np.abs(self._stoich_mat),axis=0))  # axis 0 is combine rows 
+        print((self._stoich_mat @ self._k_vec.T) @ np.power(conc, np.abs(self._stoich_mat))) # fast
+
+        rates = self._k_vec * np.power(conc, np.abs(self._stoich_mat))
+        dcdt = np.sum(self._stoich_mat.T * rates, axis=1)
+        print(rates)
+        print(dcdt)
+
+        raise ValueError
+        return (self._stoich_mat @ self._k_vec.T) @ np.power(conc, np.abs(self._stoich_mat))
     
 
-    def _construct_ode_matrix(self):
+    def _construct_ode_mat(self):
         """Constructs the ODE matrix for the system's kinetics."""
         n_species = len(self.species)
-        ode_matrix = np.zeros((n_species, n_species))
+        self._ode_mat = np.zeros((n_species, n_species))
 
         for tr in self.transitions.values():
             rate_constant = tr['value']
             for from_idx, coeff in tr['from_idx']:
-                ode_matrix[from_idx, from_idx] -= coeff * rate_constant
+                self._ode_mat[from_idx, from_idx] -= coeff * rate_constant
                 for to_idx, coeff_to in tr['to_idx']:
-                    ode_matrix[to_idx, from_idx] += coeff * rate_constant
+                    self._ode_mat[to_idx, from_idx] += coeff * rate_constant
 
-        return ode_matrix
+        self._ode_mat = self._ode_mat.T  # Transpose to have species as columns like concentration
     
-    def simulate_deterministic_matrix(self, t, method='BDF', rtol=1e-6, atol=1e-8, output_raw=False):
+    def simulate_deterministic_mat(self, t, method='BDF', rtol=1e-6, atol=1e-8, output_raw=False):
         """Simulates the system deterministically using the ODE matrix."""
         conc0 = np.array([np.atleast_1d(sp['conc'])[0] for _, sp in self.species.items()])
         self.log_dcdts()
-        ode_matrix = self._construct_ode_matrix()
-        #print(ode_matrix)
 
-        def dcdt_matrix(t, conc_vector):
-            return ode_matrix @ conc_vector
-
-        solution = solve_ivp(dcdt_matrix, (t[0], t[-1]), conc0, method=method, t_eval=t, rtol=rtol, atol=atol)
+        solution = solve_ivp(self._dcdt5, (t[0], t[-1]), conc0, method=method, t_eval=t, rtol=rtol, atol=atol)
         if not solution.success:
             raise RuntimeError("ODE solver failed: " + solution.message)
 
@@ -184,26 +257,7 @@ class NState:
             return solution
         else:
             return
-    
-    def _build_stoichiometry_matrix(self):
-        num_species = len(self.species)
-        num_transitions = len(self.transitions)
-        stoich_matrix_from = np.zeros((num_species, num_transitions))
-        stoich_matrix_to = np.zeros((num_species, num_transitions))
-        
-        for tr_idx, (tr_name, tr) in enumerate(self.transitions.items()):
-            for reactant in tr['from']:
-                name,coeff = reactant
-                sp_idx = self.species[name]['index']
-                stoich_matrix_from[sp_idx, tr_idx] = coeff
-            
-            for product in tr['to']:
-                name,coeff = product
-                sp_idx = self.species[name]['index']
-                stoich_matrix_to[sp_idx, tr_idx] = coeff
-        #net_stoich_matrix = (stoich_matrix_from - stoich_matrix_to)
 
-        return stoich_matrix_from,stoich_matrix_to
 
     def _dcdt(self, t, concentrations):
         """
@@ -248,7 +302,7 @@ class NState:
 
         for tr_name, tr in self.transitions.items():
             # Write rate law
-            rate = f"{tr_name} * " + " * ".join([f"{sp_name}^{coeff}" if coeff > 1 else f"{sp_name}" for sp_name,coeff in tr['from']])
+            rate = f"{tr_name} * " + " * ".join([f"{sp_name}^{coeff}" if coeff != 1 else f"{sp_name}" for sp_name,coeff in tr['from']])
             rate = rate.rstrip(" *")  # Remove trailing " *"
 
             # Add rate law to the eqns
@@ -386,6 +440,31 @@ class NState:
                 self.species[sp]['conc'] = solution['concentrations'][idx]
             return solution
 
+    def sum_conc(self,whitelist:list=None,blacklist:list=None):
+        """
+        Sum the concentrations of specified species in the model.
+        Whitelist and blacklist cannot be provided simultaneously.
+
+        Parameters:
+        whitelist (list, optional): Names of species to include in the sum.
+        blacklist (list, optional): Names of species to exclude from the sum.
+
+        Returns:
+        float: The sum of the concentrations.
+        """
+        if whitelist and blacklist:
+            raise ValueError("Provide either a whitelist or a blacklist, not both.")
+
+        species_names = self.species.keys()
+        
+        if whitelist:
+            species_names = [name for name in whitelist if name in species_names]
+        elif blacklist:
+            species_names = [name for name in species_names if name not in blacklist]
+
+        total_concentration = np.sum([self.species[name]['conc'] for name in species_names], axis=0)
+
+        return total_concentration
 
 
 

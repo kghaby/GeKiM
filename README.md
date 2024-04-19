@@ -39,7 +39,7 @@ scheme = {
 }
 
 # Create a model
-system = gk.scheme.NState(scheme)
+system = gk.schemes.NState(scheme)
 
 # Define time points and simulate. In this example we're doing a deterministic simulation of the concentrations of each species. 
 t = np.linspace(0.0001, 1000, 10)
@@ -48,7 +48,7 @@ system.simulate_deterministic(t)
 # Fit the data to experimental models to extract mock-experimental measurements
 final_state = system.species["EI"]['conc']
 all_bound = system.sum_conc(blacklist=["E","I","Et"])
-fit_output = ci.kobs_avail_fit_to_occ_final_wrt_t(
+fit_output = ci.kobs_uplim_fit_to_occ_final_wrt_t(
     t,final_state,nondefault_params={"Etot":{"fix":concE0}})
 print(f"Fit: {fit_output.fitted_params}\n")
 ```

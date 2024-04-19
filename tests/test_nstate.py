@@ -62,6 +62,20 @@ schemes["3S_mod1.2"] = {
         "k4": {"value": kinactb, "from": ["7EI"], "to": ["E_I","E_I","E_I"]},
     },
 }
+schemes["3S_mod2.1"] = {
+    "species": {
+        "I": {"conc": concI0, "label": r"I"},
+        "E": {"conc": concE0, "label": r"E"},
+        "E_I": {"conc": 0, "label": r"E${\cdot}$I"},
+        "EI": {"conc": 0, "label": r"E-I"},
+    },
+    "transitions": {
+        "k1": {"value": kon, "from": ["2E", "I"], "to": ["E_I","E"], "label": r"$k_{on}$"},
+        "k2": {"value": koff, "from": ["E_I","E"], "to": ["2E", "I"], "label": r"$k_{off}$"},
+        "k3": {"value": kinactf, "from": ["E_I"], "to": ["EI"]}, #irrev step
+        "k4": {"value": kinactb, "from": ["EI"], "to": ["E_I"]},
+    },
+}
 
 gk.utils.Plotting.assign_colors_to_species(schemes,saturation_range=(0.5,0.8),lightness_range=(0.4,0.5),overwrite_existing=False,seed=1)
 
@@ -80,11 +94,11 @@ class ThreeStateVani():
     def dcdt(t,concArr, params):
         kon,koff,kinactf,kinactb=params
         I, E, E_I, EI  = concArr
-        dLdt = koff*E_I - kon*I*E
-        dPdt = koff*E_I - kon*I*E 
+        dIdt = koff*E_I - kon*I*E
+        dEdt = koff*E_I - kon*I*E 
         dE_Idt = kon*I*E - koff*E_I - kinactf*E_I + kinactb*EI
         dEIdt = kinactf*E_I - kinactb*EI
-        return [dLdt, dPdt, dE_Idt, dEIdt]
+        return [dIdt, dEdt, dE_Idt, dEIdt]
         
     def solve(self, t):
         t_span = (t[0], t[-1])
@@ -106,11 +120,11 @@ class ThreeStateMod1dot1():
     def dcdt(t,concArr, params):
         kon,koff,kinactf,kinactb=params
         I, E, E_I, EI  = concArr
-        dLdt = 2*koff*E_I - 2*kon*(I**2)*E
-        dPdt = koff*E_I - kon*(I**2)*E 
+        dIdt = 2*koff*E_I - 2*kon*(I**2)*E
+        dEdt = koff*E_I - kon*(I**2)*E 
         dE_Idt = kon*(I**2)*E - koff*E_I - 3*kinactf*(E_I**3) + 3*kinactb*(EI**7)
         dEIdt = 7*kinactf*(E_I**3) - 7*kinactb*(EI**7)
-        return [dLdt, dPdt, dE_Idt, dEIdt]
+        return [dIdt, dEdt, dE_Idt, dEIdt]
         
     def solve(self, t):
         t_span = (t[0], t[-1])
@@ -132,11 +146,37 @@ class ThreeStateMod1dot2():
     def dcdt(t,concArr, params):
         kon,koff,kinactf,kinactb=params
         I, E, E_I, EI  = concArr
-        dLdt = koff*E_I + koff*E_I - kon*I*I*E - kon*I*I*E
-        dPdt = koff*E_I - kon*I*I*E 
+        dIdt = koff*E_I + koff*E_I - kon*I*I*E - kon*I*I*E
+        dEdt = koff*E_I - kon*I*I*E 
         dE_Idt = kon*I*I*E - koff*E_I - kinactf*E_I*E_I*E_I - kinactf*E_I*E_I*E_I - kinactf*E_I*E_I*E_I + kinactb*(EI**7) + kinactb*(EI**7) + kinactb*(EI**7)
         dEIdt = 7*kinactf*E_I*E_I*E_I - 7*kinactb*(EI**7)
-        return [dLdt, dPdt, dE_Idt, dEIdt]
+        return [dIdt, dEdt, dE_Idt, dEIdt]
+        
+    def solve(self, t):
+        t_span = (t[0], t[-1])
+        params = (self.kon, self.koff, self.kinactf, self.kinactb)
+        solution = solve_ivp(self.dcdt, t_span, self.conc0Arr, t_eval=t, args=(params,), method='BDF', rtol=1e-6, atol=1e-8)
+        return solution
+
+class ThreeStateMod2dot1():
+    def __init__(self,Ki,koff,kinactf,kinactb,conc0Arr):
+        self.Ki = Ki
+        self.koff = koff
+        self.kon = self.koff / Ki
+        self.kinactf=kinactf
+        self.kinactb=kinactb
+        self.conc0Arr = conc0Arr
+        self.sol=None
+
+    @staticmethod
+    def dcdt(t,concArr, params):
+        kon,koff,kinactf,kinactb=params
+        I, E, E_I, EI  = concArr
+        dIdt = koff*E_I*E - kon*I*(E**2) 
+        dEdt = 2*koff*E_I*E - 2*kon*I*(E**2) + kon*I*(E**2) - koff*E_I*E
+        dE_Idt = kon*I*(E**2) - koff*E_I*E - kinactf*E_I + kinactb*EI
+        dEIdt = kinactf*E_I - kinactb*EI
+        return [dIdt, dEdt, dE_Idt, dEIdt]
         
     def solve(self, t):
         t_span = (t[0], t[-1])
@@ -157,7 +197,7 @@ def compare_dictionaries(dict1, dict2, tol=1e-9):
 def solve_system(system,t,concE0):
     sol = system.solve(t)
     final_state = sol.y[-1]
-    fit_output = ci.kobs_avail_fit_to_occ_final_wrt_t(
+    fit_output = ci.kobs_uplim_fit_to_occ_final_wrt_t(
         t,final_state,nondefault_params={"Etot":{"fix":concE0}})
     system_dict = {
         "system": system,
@@ -174,6 +214,8 @@ hardcoded_mod1dot1 = ThreeStateMod1dot1(Kd,koff,kinactf,kinactb,conc0Arr)
 mod1dot1_dict = solve_system(hardcoded_mod1dot1,t,concE0)
 hardcoded_mod1dot2 = ThreeStateMod1dot2(Kd,koff,kinactf,kinactb,conc0Arr)
 mod1dot2_dict = solve_system(hardcoded_mod1dot2,t,concE0)
+hardcoded_mod2dot1 = ThreeStateMod2dot1(Kd,koff,kinactf,kinactb,conc0Arr)
+mod2dot1_dict = solve_system(hardcoded_mod2dot1,t,concE0)
 
 # Solve gekim systems 
 for name,scheme in schemes.items():
@@ -181,7 +223,7 @@ for name,scheme in schemes.items():
     sol = system.simulate_deterministic(t,output_raw=True)
     final_state = system.species["EI"]['conc']
     all_bound = system.sum_conc(blacklist=["E","I"])
-    fit_output = ci.kobs_avail_fit_to_occ_final_wrt_t(
+    fit_output = ci.kobs_uplim_fit_to_occ_final_wrt_t(
         t,final_state,nondefault_params={"Etot":{"fix":concE0}})
     schemes[name]["fit_output"] = fit_output
     schemes[name]["sol"] = sol
@@ -244,6 +286,7 @@ compare_systems("vani hardcoded", vani_dict, "vani gekim", schemes["3S_vani"], t
 compare_systems("mod1.1 hardcoded", mod1dot1_dict, "mod1.1 gekim", schemes["3S_mod1.1"], t)
 compare_systems("mod1.2 hardcoded", mod1dot2_dict, "mod1.2 gekim", schemes["3S_mod1.2"], t)
 compare_systems("mod1.1 gekim", schemes["3S_mod1.1"], "mod1.2 gekim", schemes["3S_mod1.2"], t)
+compare_systems("mod2.1 hardcoded", mod2dot1_dict, "mod2.1 gekim", schemes["3S_mod2.1"], t)
 
 
 

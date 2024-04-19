@@ -49,10 +49,13 @@ class NState:
         self._validate_species()
 
         self.transitions = self.config['transitions']
+        # Document the order of the transitions
+        for idx, name in enumerate(self.config['transitions']):
+            self.transitions[name]['index'] = idx
         
         self._preprocess_transitions()
-        self._construct_matrices()
-        self._construct_ode_mat()
+        self._generate_matrices()
+        # self._construct_ode_mat() # replace with jacobian and proper ode matrices
 
         self.t = None
         
@@ -119,121 +122,46 @@ class NState:
             tr['to_idx'] = [(self.species[name]['index'], coeff) for name, coeff in (self._parse_species_string(sp) for sp in tr['to'])]
             tr['to'] = [(name, coeff) for name, coeff in (self._parse_species_string(sp) for sp in tr['to'])]
 
-    def _construct_matrices(self):
+    def _generate_matrices(self):
+        """
+        Generates 
+            unit species matrix (self._unit_sp_mat), 
+            stoichiometry matrix (self._stoich_mat), 
+            stoichiometry reactant matrix (self._stoich_reactant_mat), and 
+            rate constant vector (self._k_vec) and diagonal matrix (self._k_diag).
+
+        Rows are transitions, columns are species.
+
+        Used for solving ODEs.
+        """
+
         n_species = len(self.species)
         n_transitions = len(self.transitions)
-        self._stoich_mat = np.zeros((n_transitions, n_species), dtype=int)  # Stoichiometry coefficients
-        self._k_vec = np.zeros(n_transitions)  # Rate constants
+        self._unit_sp_mat = np.eye(n_species, dtype=int)
 
-        sp_idx = {name: idx for idx, name in enumerate(self.species)}
+        # Initialize matrices
+        self._stoich_reactant_mat = np.zeros((n_transitions, n_species), dtype=int)
+        self._stoich_mat = np.zeros((n_transitions, n_species), dtype=int)
+        self._k_vec = np.zeros(n_transitions)
 
-        for tr_idx, (_,tr) in enumerate(self.transitions.items()):
+        # Fill stoich matrices and k vector
+        for tr_name, tr in self.transitions.items():
+            tr_idx = tr['index']
             self._k_vec[tr_idx] = tr['value']
-            for sp,coeff in tr['from']:
-                self._stoich_mat[tr_idx,sp_idx[sp]] -= coeff
-            for sp,coeff in tr['to']:
-                self._stoich_mat[tr_idx,sp_idx[sp]] += coeff
+            reactant_vec = np.sum(self._unit_sp_mat[self.species[name]['index']] * coeff for name, coeff in tr['from'])
+            product_vec = np.sum(self._unit_sp_mat[self.species[name]['index']] * coeff for name, coeff in tr['to'])
+            
+            self._stoich_reactant_mat[tr_idx, :] = reactant_vec  
+            #self._stoich_product_mat[tr_idx, :] = product_vec   # not used
+            self._stoich_mat[tr_idx] = product_vec - reactant_vec
 
         self._k_diag = np.diag(self._k_vec)
-        self._stoich_reactant_mat = np.abs(self._stoich_mat.clip(max=0))
 
-
-
-    def dcdt2(self, t, concentrations):
-        reaction_rates = self.rate_constants * np.prod(np.power(np.maximum(concentrations, 0), self.stoich_mat.T.clip(min=0)), axis=1)
-        print(reaction_rates)
-        return self.stoich_mat @ reaction_rates
-
-    def _dcdt6(self, t, conc):
-        #TODO: transpose others instead of currently transposed. Construct stoich from complex vectors 
-        C_Nr = np.prod(np.power(conc, self._stoich_reactant_mat), axis=1)
-        N_K = np.dot(self._k_diag,self._stoich_mat)
+    def _dcdt(self, t, conc):
+        C_Nr = np.prod(np.power(conc, self._stoich_reactant_mat), axis=1) # state dependencies
+        N_K = np.dot(self._k_diag,self._stoich_mat) # interactions
         dCdt = np.dot(C_Nr,N_K)
         return dCdt
-
-    def _dcdt5(self, t, conc):
-        #TODO: transpose others instead of currently transposed. Construct stoich from complex vectors 
-        C = conc
-        C_Nr = np.prod(np.power(C, self._stoich_reactant_mat), axis=1)
-        print(C_Nr)
-        N_K = np.dot(self._k_diag,self._stoich_mat)
-        print(N_K)
-
-        dCdt = np.dot(C_Nr,N_K)
-        print(dCdt)
-        raise ValueError
-        return dCdt
-        #return np.dot(np.dot(self._stoich_mat,self._k_vec),np.prod(np.power(conc[:, np.newaxis], self.Y), axis=0))
-
-    def _dcdt4(self, t, conc):
-        
-        R = self._stoich_mat.T
-        K = self._k_vec
-        X = conc[:, np.newaxis]
-        Y = np.abs(R.clip(max=0))
-        print(R)
-        print(X)
-        #print(Y)
-        XY=np.prod(np.power(X, Y), axis=0)
-        #print(XY)
-        RK = np.dot(R,np.diag(K))
-        #print(RK)
-        dXdt=np.dot(RK,XY)
-        #print(dXdt)
-        raise ValueError
-
-        #print(self._k_vec)
-        #print(np.diag(self._k_vec))
-        #print(self._stoich_mat)
-        #print(self._k_vec*self._stoich_mat)
-        mat=np.dot(np.diag(self._k_vec),self._stoich_mat) # produces ode_mat on linear system 
-        mat = np.array([    [ 0.,          0.        ,  0.        ],\
-                            [ 0.,         -0.02222222,  0.01111111],\
-                            [ 0.,          0.00222222, -0.00111111]])
-        print(mat) 
-        #print(np.sum(mat,axis=0))
-        #print(np.dot(self._k_vec,self._stoich_mat)) # produces collapsed ode_mat
-        #print(self._stoich_mat)
-        #print(conc)
-        C = np.power(conc, np.abs(self._stoich_mat.clip(max=0)))
-        print(C)
-        #print(mat*C)
-        print(np.dot(C,mat))
-
-        #M=self._stoich_mat*np.power(conc, np.abs(self._stoich_mat))
-        #print("M",M)
-        #print(np.dot(self._k_vec,M))
-        #print(np.dot(np.diag(self._k_vec),M))
-
-        #print(np.power(conc, np.abs(self._stoich_mat)))
-        #print(self._ode_mat)
-        #print(np.sum(self._ode_mat,axis=0))
-        #print(self._ode_mat.T * np.power(conc, np.abs(self._stoich_mat)))
-
-        #print(np.sum(self._ode_mat.T * np.power(conc, np.abs(self._stoich_mat)),axis=0))
-        raise ValueError
-        print(self._stoich_mat * self._k_vec[:, np.newaxis])
-        print(conc[np.newaxis, :] ** np.abs(self._stoich_mat))
-        print(self._stoich_mat * self._k_vec[:, np.newaxis] * conc[np.newaxis, :] ** np.abs(self._stoich_mat))
-        print(np.sum(self._stoich_mat * self._k_vec[:, np.newaxis] * conc[np.newaxis, :] ** np.abs(self._stoich_mat), axis=0))
-        raise ValueError
-        #k_conc_mat = self._k_vec * np.prod(np.power(conc, np.abs(self._stoich_mat)), axis=1
-        print(self._stoich_mat)
-        print(self._k_vec)
-        print(self._stoich_mat*self._k_vec)
-        print(conc[:, np.newaxis]**np.abs(self._stoich_mat))
-        print(self._stoich_mat*self._k_vec*conc[:, np.newaxis]**np.abs(self._stoich_mat))
-        print(np.sum(self._ode_mat.T*conc[:, np.newaxis]**np.abs(self._stoich_mat),axis=0))  # axis 0 is combine rows 
-        print((self._stoich_mat @ self._k_vec.T) @ np.power(conc, np.abs(self._stoich_mat))) # fast
-
-        rates = self._k_vec * np.power(conc, np.abs(self._stoich_mat))
-        dcdt = np.sum(self._stoich_mat.T * rates, axis=1)
-        print(rates)
-        print(dcdt)
-
-        raise ValueError
-        return (self._stoich_mat @ self._k_vec.T) @ np.power(conc, np.abs(self._stoich_mat))
-    
 
     def _construct_ode_mat(self):
         """Constructs the ODE matrix for the system's kinetics."""
@@ -245,16 +173,27 @@ class NState:
             for from_idx, coeff in tr['from_idx']:
                 self._ode_mat[from_idx, from_idx] -= coeff * rate_constant
                 for to_idx, coeff_to in tr['to_idx']:
-                    self._ode_mat[to_idx, from_idx] += coeff * rate_constant
+                    self._ode_mat[to_idx, from_idx] += coeff_to * rate_constant  # Use coeff_to for product terms
 
-        self._ode_mat = self._ode_mat.T  # Transpose to have species as columns like concentration
+        self._ode_mat = self._ode_mat.T  # Transpose if necessary depending on how it's used later
     
-    def simulate_deterministic_mat(self, t, method='BDF', rtol=1e-6, atol=1e-8, output_raw=False):
-        """Simulates the system deterministically using the ODE matrix."""
+    def simulate_deterministic(self, t, method='BDF', rtol=1e-6, atol=1e-8, output_raw=False):
+        """
+        Solve the ODEs for the system and update the species concentrations.
+
+        Parameters:
+        t (np.array): Time points for ODE solutions.
+        method (str): Integration method, default is 'BDF'.
+
+        rtol (float): Relative tolerance for the solver. Default is 1e-6
+        atol (float): Absolute tolerance for the solver. Default is 1e-8
+        output_raw (bool): If True, return raw solver output. 
+
+        """
         conc0 = np.array([np.atleast_1d(sp['conc'])[0] for _, sp in self.species.items()])
         self.log_dcdts()
 
-        solution = solve_ivp(self._dcdt6, (t[0], t[-1]), conc0, method=method, t_eval=t, rtol=rtol, atol=atol)
+        solution = solve_ivp(self._dcdt, (t[0], t[-1]), conc0, method=method, t_eval=t, rtol=rtol, atol=atol)
         if not solution.success:
             raise RuntimeError("ODE solver failed: " + solution.message)
 
@@ -271,7 +210,7 @@ class NState:
             return
 
 
-    def _dcdt(self, t, concentrations):
+    def _dcdt_old(self, t, concentrations):
         """
         Compute the derivative of concentrations with respect to time.
         Can directly handle non-linear reactions (eg stoich coeff > 1)
@@ -282,8 +221,7 @@ class NState:
 
         Returns:
         numpy.array: Array of concentration time derivatives.
-        """
-        #TODO: vectorize and use numba by preprocessing to cover edge cases. Also, write tests for edge cases, esp regarding stoichiometry. I might have the test configs somewhere 
+        """ 
         dcdt_arr = np.zeros_like(concentrations)
         for tr in self.transitions.values():
             rate_constant = tr['value']
@@ -343,9 +281,9 @@ class NState:
     
 
 
-    def simulate_deterministic(self, t, method='BDF', rtol=1e-6, atol=1e-8, output_raw=False):
+    def simulate_deterministic_old(self, t, method='BDF', rtol=1e-6, atol=1e-8, output_raw=False):
         """
-        Solve the ODEs for the system with flexible output handling.
+        Solve the ODEs for the system.
 
         Parameters:
         t (np.array): Time points for ODE solutions.

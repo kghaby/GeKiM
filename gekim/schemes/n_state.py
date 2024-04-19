@@ -99,7 +99,7 @@ class NState:
         species_str (str): A species string, e.g., '2A'.
 
         Returns:
-        tuple: A tuple of species name (str) and stoicheometric coefficient (int).
+        tuple: A tuple of species name (str) and stoichiometric coefficient (int).
         """
         match = re.match(r"(\d*)(\D.*)", species_str)
         if match and match.groups()[0]:
@@ -281,7 +281,7 @@ class NState:
     
 
 
-    def simulate_deterministic_old(self, t, method='BDF', rtol=1e-6, atol=1e-8, output_raw=False):
+    def _simulate_deterministic_old(self, t, method='BDF', rtol=1e-6, atol=1e-8, output_raw=False):
         """
         Solve the ODEs for the system.
 
@@ -302,7 +302,7 @@ class NState:
         # num_reactions = self._rate_constants.shape[0] #used in faster alg
         try:
             solution = solve_ivp(
-                fun=lambda t, conc: self._dcdt(t, conc),
+                fun=lambda t, conc: self._dcdt_old(t, conc),
                 t_span=t_span, y0=conc0, t_eval=t, method=method, rtol=rtol, atol=atol
             )
             if not solution.success:

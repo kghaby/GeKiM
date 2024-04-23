@@ -4,7 +4,6 @@ from ..utils import _update_dict_with_subset
 from . import fitting
 
 # TODO: fit to scheme. meaning yuo make a scheme without values for the transitions and fit it to occ data to see what values of rates satisfy curve
-# TODO: check if nondefault_params can be a dict without breaking stuff. Like how it cant be a list bc list is mutable and all calls share the same default list
 # TODO: fitting can break with small occ values, like if using M units. Is this a limit of curve fit?
 def occ_final_wrt_t(t,kobs,Etot,uplim=1):
     '''

@@ -42,8 +42,8 @@ schemes["3S_mod1.1"] = {
         "EI": {"conc": 0, "label": r"E-I"},
     },
     "transitions": {
-        "k1": {"value": kon, "from": ["E", "2I"], "to": ["E_I"], "label": r"$k_{on}$"},
-        "k2": {"value": koff, "from": ["E_I"], "to": ["E", "2I"], "label": r"$k_{off}$"},
+        "k1": {"value": kon, "from": ["E", "2.0I"], "to": ["E_I"], "label": r"$k_{on}$"},
+        "k2": {"value": koff, "from": ["E_I"], "to": ["E", "2.0I"], "label": r"$k_{off}$"},
         "k3": {"value": kinactf, "from": ["3E_I"], "to": ["7EI"]}, #irrev step
         "k4": {"value": kinactb, "from": ["7EI"], "to": ["3E_I"]},
     },
@@ -78,6 +78,87 @@ schemes["3S_mod2.1"] = {
 }
 
 gk.utils.Plotting.assign_colors_to_species(schemes,saturation_range=(0.5,0.8),lightness_range=(0.4,0.5),overwrite_existing=False,seed=1)
+
+# Old NState functions for making sure new versions produce the same results
+def _dcdt_old(system, t, concentrations):
+    """
+    Compute the derivative of concentrations with respect to time.
+    Can directly handle non-linear reactions (eg stoich coeff > 1)
+    """ 
+    dcdt_arr = np.zeros_like(concentrations)
+    for tr in system.transitions.values():
+        rate_constant = tr['value']
+        rate = rate_constant * np.prod([concentrations[system.species[sp_name]['index']] ** coeff for sp_name,coeff in tr['from']])
+        # Iterating through like this is beneficial because it captures stoichiometry that is evident in the list rather than coefficient 
+            # (eg "from": ["E","E", "I"] is equal to "from": ["2E", "I"])
+        for sp_name,coeff in tr['from']:
+            dcdt_arr[system.species[sp_name]['index']] -= coeff * rate
+        for sp_name,coeff in tr['to']:
+            dcdt_arr[system.species[sp_name]['index']] += coeff * rate
+    return dcdt_arr
+
+def _simulate_deterministic_old(system, t, method='BDF', rtol=1e-6, atol=1e-8, output_raw=False):
+    """
+    Solve the ODEs for the system.
+    """
+    conc0 = np.array([np.atleast_1d(sp['conc'])[0] for _, sp in system.species.items()])
+    t_span = (t[0], t[-1])
+    system.log_dcdts()
+
+    try:
+        solution = solve_ivp(
+            fun=lambda t, conc: _dcdt_old(system, t, conc),
+            t_span=t_span, y0=conc0, t_eval=t, method=method, rtol=rtol, atol=atol
+        )
+        if not solution.success:
+            raise RuntimeError("ODE solver failed: " + solution.message)
+
+        system.t = t
+        for name,data in system.species.items():
+            data['conc'] = solution.y[data['index']]
+
+        system.logger.info("ODEs solved successfully.")
+        if output_raw:
+            return solution
+        else:
+            return
+    except Exception as e:
+        system.logger.error(f"Error in solving ODEs: {e}")
+        raise
+
+# Solve gekim systems 
+for name,scheme in schemes.items():
+    system = gk.schemes.NState(scheme,quiet=True)
+    #sol = _simulate_deterministic_old(system,t,output_raw=True) #testing with old (nonvectorized) version
+    sol = system.simulate_deterministic(t,output_raw=True)
+    final_state = system.species["EI"]['conc']
+    all_bound = system.sum_conc(blacklist=["E","I"])
+    fit_output = ci.kobs_uplim_fit_to_occ_final_wrt_t(
+        t,final_state,nondefault_params={"Etot":{"fix":concE0}})
+    schemes[name]["fit_output"] = fit_output
+    schemes[name]["sol"] = sol
+    
+    if PLOT:
+        fig = plt.figure(figsize=(5, 3))
+
+        # Time course of species 
+        for species, sp_data in system.species.items():
+            if species == "I":
+                continue
+            plt.plot(t, sp_data['conc'], label=sp_data['label'],color=sp_data["color"])
+
+        # All bound states
+        all_bound = system.sum_conc(blacklist=["E","I"])
+        plt.plot(t, all_bound,label='All Bound States',color="grey")
+
+        # Fitted data
+        plt.plot(t,  fit_output.fitted_data,label=r"New Fit: $k_{\text{obs}}$ = "+
+                 str(gk.utils.round_sig(fit_output.fitted_params["kobs"],3))+r" $\text{s}^{-1}$",ls='--', color="black")
+
+        plt.xlabel('Time (s)')
+        plt.ylabel('Concentration (nM)')
+        plt.legend(frameon=False)
+        plt.show()
 
 # Hardcoded 3S systems 
 class ThreeStateVani():
@@ -193,63 +274,6 @@ def compare_dictionaries(dict1, dict2, tol=1e-9):
             return False
     return True
 
-# Solve hardcoded systems
-def solve_system(system,t,concE0):
-    sol = system.solve(t)
-    final_state = sol.y[-1]
-    fit_output = ci.kobs_uplim_fit_to_occ_final_wrt_t(
-        t,final_state,nondefault_params={"Etot":{"fix":concE0}})
-    system_dict = {
-        "system": system,
-        "sol": sol,
-        "final_state": final_state,
-        "fit_output": fit_output
-    }
-    return system_dict
-
-conc0Arr = [concI0,concE0,0,0]
-hardcoded_vani = ThreeStateVani(Kd,koff,kinactf,kinactb,conc0Arr)
-vani_dict = solve_system(hardcoded_vani,t,concE0)
-hardcoded_mod1dot1 = ThreeStateMod1dot1(Kd,koff,kinactf,kinactb,conc0Arr)
-mod1dot1_dict = solve_system(hardcoded_mod1dot1,t,concE0)
-hardcoded_mod1dot2 = ThreeStateMod1dot2(Kd,koff,kinactf,kinactb,conc0Arr)
-mod1dot2_dict = solve_system(hardcoded_mod1dot2,t,concE0)
-hardcoded_mod2dot1 = ThreeStateMod2dot1(Kd,koff,kinactf,kinactb,conc0Arr)
-mod2dot1_dict = solve_system(hardcoded_mod2dot1,t,concE0)
-
-# Solve gekim systems 
-for name,scheme in schemes.items():
-    system = gk.schemes.NState(scheme,quiet=True)
-    sol = system.simulate_deterministic(t,output_raw=True)
-    final_state = system.species["EI"]['conc']
-    all_bound = system.sum_conc(blacklist=["E","I"])
-    fit_output = ci.kobs_uplim_fit_to_occ_final_wrt_t(
-        t,final_state,nondefault_params={"Etot":{"fix":concE0}})
-    schemes[name]["fit_output"] = fit_output
-    schemes[name]["sol"] = sol
-    
-    if PLOT:
-        fig = plt.figure(figsize=(5, 3))
-
-        # Time course of species 
-        for species, props in system.species.items():
-            if species == "I":
-                continue
-            plt.plot(t, props['conc'], label=props['label'],color=props["color"])
-
-        # All bound states
-        all_bound = system.sum_conc(blacklist=["E","I"])
-        plt.plot(t, all_bound,label='All Bound States',color="grey")
-
-        # Fitted data
-        plt.plot(t,  fit_output.fitted_data,label=r"New Fit: $k_{\text{obs}}$ = "+
-                 str(gk.utils.round_sig(fit_output.fitted_params["kobs"],3))+r" $\text{s}^{-1}$",ls='--', color="black")
-
-        plt.xlabel('Time (s)')
-        plt.ylabel('Concentration (nM)')
-        plt.legend(frameon=False)
-        plt.show()
-
 def compare_systems(sys1_label,sys1_dict, sys2_label,sys2_dict, t):
     if np.allclose(sys1_dict["sol"].y, sys2_dict["sol"].y,rtol=1e-6) and \
         gk.utils.compare_dictionaries(sys1_dict["fit_output"].fitted_params,sys2_dict["fit_output"].fitted_params,rel_tol=1e-6):
@@ -281,6 +305,30 @@ def compare_systems(sys1_label,sys1_dict, sys2_label,sys2_dict, t):
 
         plt.tight_layout()
         plt.show()
+
+# Solve hardcoded systems
+def solve_system(system,t,concE0):
+    sol = system.solve(t)
+    final_state = sol.y[-1]
+    fit_output = ci.kobs_uplim_fit_to_occ_final_wrt_t(
+        t,final_state,nondefault_params={"Etot":{"fix":concE0}})
+    system_dict = {
+        "system": system,
+        "sol": sol,
+        "final_state": final_state,
+        "fit_output": fit_output
+    }
+    return system_dict
+
+conc0Arr = [concI0,concE0,0,0]
+hardcoded_vani = ThreeStateVani(Kd,koff,kinactf,kinactb,conc0Arr)
+vani_dict = solve_system(hardcoded_vani,t,concE0)
+hardcoded_mod1dot1 = ThreeStateMod1dot1(Kd,koff,kinactf,kinactb,conc0Arr)
+mod1dot1_dict = solve_system(hardcoded_mod1dot1,t,concE0)
+hardcoded_mod1dot2 = ThreeStateMod1dot2(Kd,koff,kinactf,kinactb,conc0Arr)
+mod1dot2_dict = solve_system(hardcoded_mod1dot2,t,concE0)
+hardcoded_mod2dot1 = ThreeStateMod2dot1(Kd,koff,kinactf,kinactb,conc0Arr)
+mod2dot1_dict = solve_system(hardcoded_mod2dot1,t,concE0)
 
 compare_systems("vani hardcoded", vani_dict, "vani gekim", schemes["3S_vani"], t)
 compare_systems("mod1.1 hardcoded", mod1dot1_dict, "mod1.1 gekim", schemes["3S_mod1.1"], t)

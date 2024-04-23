@@ -6,9 +6,8 @@ import sys
 from scipy.integrate import solve_ivp
         
 class NState:
-    #TODO: Make sure its all np arrays and not lists 
     #TODO: Add stochastic method
-    #TODO: logger retains previous classes? Jupyter output was showing previous class logs i think
+    #TODO: logger retains previous classes? Jupyter output was showing previous class logs i think. Happens sometimes
     
     def __init__(self, config, logfilename=None, quiet=False):
         """
@@ -53,18 +52,26 @@ class NState:
         for idx, name in enumerate(self.config['transitions']):
             self.transitions[name]['index'] = idx
         
-        self._preprocess_transitions()
+        self._format_transitions()
         self._generate_matrices()
         # self._construct_ode_mat() # replace with jacobian and proper ode matrices
 
         self.t = None
         
         self.logger.info(f"NState system initialized successfully.")
+    
+    def reformat(self):
+        """
+        Use this if you added transitions or species after initialization.
+        """
+        self._format_transitions()
+        self._generate_matrices()
+        return
 
     def _validate_config(self,config):
-        #TODO: Make sure names are unique and nonempty 
         if not 'species' in config or not 'transitions' in config:
             raise ValueError("Config must contain 'species' and 'transitions' keys.")
+        return True
 
     def _validate_species(self):
         """
@@ -101,142 +108,48 @@ class NState:
         Returns:
         tuple: A tuple of species name (str) and stoichiometric coefficient (int).
         """
-        match = re.match(r"(\d*)(\D.*)", species_str)
+        match = re.match(r"(\d*\.?\d*)(\D.*)", species_str)
         if match and match.groups()[0]:
-            if float(int(float(match.groups()[0])) == float(match.groups()[0])): # Lets "5.0" be a valid stoich coeff
-                coeff = int(match.groups()[0])
-            else:
-                raise ValueError(f"Invalid coefficient '{match.groups()[0]}' in species string '{species_str}'.")
+            coeff = float(match.groups()[0])
         else:
             coeff = 1
         name = match.groups()[1] if match else species_str
         return name,coeff
                 
-    def _preprocess_transitions(self):
+    def _format_transitions(self):
         """
-        Preprocess the transitions by extracting coefficients and species names.
+        Format the transitions by extracting and combining coefficients and species names.
+        Is idempotent.
         """
         for _, tr in self.transitions.items():
-            tr['from_idx'] = [(self.species[name]['index'], coeff) for name, coeff in (self._parse_species_string(sp) for sp in tr['from'])]
-            tr['from'] = [(name, coeff) for name, coeff in (self._parse_species_string(sp) for sp in tr['from'])]
-            tr['to_idx'] = [(self.species[name]['index'], coeff) for name, coeff in (self._parse_species_string(sp) for sp in tr['to'])]
-            tr['to'] = [(name, coeff) for name, coeff in (self._parse_species_string(sp) for sp in tr['to'])]
+            for direction in ['from', 'to']:
+                parsed_species = {}
+                for sp in tr[direction]:
+                    if isinstance(sp, str):
+                        name, coeff = self._parse_species_string(sp)
+                    elif isinstance(sp, tuple):
+                        if len(sp) == 2:
+                            if isinstance(sp[0], str) and isinstance(sp[1], (int, float)):
+                                name, coeff = sp
+                            elif isinstance(sp[1], str) and isinstance(sp[2], (int, float)):
+                                coeff, name = sp
+                            else:
+                                raise ValueError(f"Invalid species tuple '{sp}' in transition '{tr}'.")
+                        else:
+                            raise ValueError(f"Invalid species tuple '{sp}' in transition '{tr}'.")
+                    else:
+                        raise ValueError(f"Invalid species '{sp}' in transition '{tr}'.")
+                    if name in parsed_species:
+                        parsed_species[name] += coeff # combine coeffs
+                    else:
+                        parsed_species[name] = coeff
+                tr[direction] = [(name, coeff) for name, coeff in parsed_species.items()]
+        return
 
-    def _generate_matrices(self):
-        """
-        Generates 
-            unit species matrix (self._unit_sp_mat), 
-            stoichiometry matrix (self._stoich_mat), 
-            stoichiometry reactant matrix (self._stoich_reactant_mat), and 
-            rate constant vector (self._k_vec) and diagonal matrix (self._k_diag).
-
-        Rows are transitions, columns are species.
-
-        Used for solving ODEs.
-        """
-
-        n_species = len(self.species)
-        n_transitions = len(self.transitions)
-        self._unit_sp_mat = np.eye(n_species, dtype=int)
-
-        # Initialize matrices
-        self._stoich_reactant_mat = np.zeros((n_transitions, n_species), dtype=int)
-        self._stoich_mat = np.zeros((n_transitions, n_species), dtype=int)
-        self._k_vec = np.zeros(n_transitions)
-
-        # Fill stoich matrices and k vector
-        for tr_name, tr in self.transitions.items():
-            tr_idx = tr['index']
-            self._k_vec[tr_idx] = tr['value']
-            reactant_vec = np.sum(self._unit_sp_mat[self.species[name]['index']] * coeff for name, coeff in tr['from'])
-            product_vec = np.sum(self._unit_sp_mat[self.species[name]['index']] * coeff for name, coeff in tr['to'])
-            
-            self._stoich_reactant_mat[tr_idx, :] = reactant_vec  
-            #self._stoich_product_mat[tr_idx, :] = product_vec   # not used
-            self._stoich_mat[tr_idx] = product_vec - reactant_vec
-
-        self._k_diag = np.diag(self._k_vec)
-
-    def _dcdt(self, t, conc):
-        C_Nr = np.prod(np.power(conc, self._stoich_reactant_mat), axis=1) # state dependencies
-        N_K = np.dot(self._k_diag,self._stoich_mat) # interactions
-        dCdt = np.dot(C_Nr,N_K)
-        return dCdt
-
-    def _construct_ode_mat(self):
-        """Constructs the ODE matrix for the system's kinetics."""
-        n_species = len(self.species)
-        self._ode_mat = np.zeros((n_species, n_species))
-
-        for tr in self.transitions.values():
-            rate_constant = tr['value']
-            for from_idx, coeff in tr['from_idx']:
-                self._ode_mat[from_idx, from_idx] -= coeff * rate_constant
-                for to_idx, coeff_to in tr['to_idx']:
-                    self._ode_mat[to_idx, from_idx] += coeff_to * rate_constant  # Use coeff_to for product terms
-
-        self._ode_mat = self._ode_mat.T  # Transpose if necessary depending on how it's used later
-    
-    def simulate_deterministic(self, t, method='BDF', rtol=1e-6, atol=1e-8, output_raw=False):
-        """
-        Solve the ODEs for the system and update the species concentrations.
-
-        Parameters:
-        t (np.array): Time points for ODE solutions.
-        method (str): Integration method, default is 'BDF'.
-
-        rtol (float): Relative tolerance for the solver. Default is 1e-6
-        atol (float): Absolute tolerance for the solver. Default is 1e-8
-        output_raw (bool): If True, return raw solver output. 
-
-        """
-        conc0 = np.array([np.atleast_1d(sp['conc'])[0] for _, sp in self.species.items()])
-        self.log_dcdts()
-
-        solution = solve_ivp(self._dcdt, (t[0], t[-1]), conc0, method=method, t_eval=t, rtol=rtol, atol=atol)
-        if not solution.success:
-            raise RuntimeError("ODE solver failed: " + solution.message)
-
-        # Update species concentrations
-        self.t = t
-        for name,data in self.species.items():
-            data['conc'] = solution.y[data['index']]
-
-        self.logger.info("ODEs solved successfully.")
-
-        if output_raw:
-            return solution
-        else:
-            return
-
-
-    def _dcdt_old(self, t, concentrations):
-        """
-        Compute the derivative of concentrations with respect to time.
-        Can directly handle non-linear reactions (eg stoich coeff > 1)
-
-        Parameters:
-        t (float): Time.
-        concentrations (numpy.array): Array of species concentrations.
-
-        Returns:
-        numpy.array: Array of concentration time derivatives.
-        """ 
-        dcdt_arr = np.zeros_like(concentrations)
-        for tr in self.transitions.values():
-            rate_constant = tr['value']
-            rate = rate_constant * np.prod([concentrations[self.species[sp_name]['index']] ** coeff for sp_name,coeff in tr['from']])
-            # Iterating through like this is beneficial because it captures stoichiometry that is evident in the list rather than coefficient 
-                # (eg "from": ["E","E", "I"] is equal to "from": ["2E", "I"])
-            for sp_name,coeff in tr['from']:
-                dcdt_arr[self.species[sp_name]['index']] -= coeff * rate
-            for sp_name,coeff in tr['to']:
-                dcdt_arr[self.species[sp_name]['index']] += coeff * rate
-        return dcdt_arr
-        
     def log_dcdts(self,force_print=False):
         """
         Log the ordinary differential equations for the concentrations of each species over time in a readable format.
+        Will write the coefficients used in the config.
         """
         dcdt_dict = {}
         max_header_length = 0
@@ -278,12 +191,54 @@ class NState:
         self.logger.info(ode_log)
         if force_print:
             print(ode_log)
-    
+        return
 
-
-    def _simulate_deterministic_old(self, t, method='BDF', rtol=1e-6, atol=1e-8, output_raw=False):
+    def _generate_matrices(self):
         """
-        Solve the ODEs for the system.
+        Generates 
+            unit species matrix (self._unit_sp_mat), 
+            stoichiometry matrix (self._stoich_mat), 
+            stoichiometry reactant matrix (self._stoich_reactant_mat), and 
+            rate constant vector (self._k_vec) and diagonal matrix (self._k_diag).
+
+        Rows are transitions, columns are species.
+
+        Used for solving ODEs.
+        """
+
+        n_species = len(self.species)
+        n_transitions = len(self.transitions)
+        self._unit_sp_mat = np.eye(n_species, dtype=int)
+
+        # Initialize matrices
+        self._stoich_reactant_mat = np.zeros((n_transitions, n_species))
+        self._stoich_mat = np.zeros((n_transitions, n_species))
+        self._k_vec = np.zeros(n_transitions)
+
+        # Fill stoich matrices and k vector
+        for tr_name, tr in self.transitions.items():
+            tr_idx = tr['index']
+            self._k_vec[tr_idx] = tr['value']
+            reactant_vec = np.sum(self._unit_sp_mat[self.species[name]['index']] * coeff for name, coeff in tr['from'])
+            product_vec = np.sum(self._unit_sp_mat[self.species[name]['index']] * coeff for name, coeff in tr['to'])
+            
+            self._stoich_reactant_mat[tr_idx, :] = reactant_vec  
+            #self._stoich_product_mat[tr_idx, :] = product_vec   # not used
+            self._stoich_mat[tr_idx] = product_vec - reactant_vec
+
+        self._k_diag = np.diag(self._k_vec)
+
+        return
+
+    def _dcdt(self, t, conc):
+        C_Nr = np.prod(np.power(conc, self._stoich_reactant_mat), axis=1) # state dependencies
+        N_K = np.dot(self._k_diag,self._stoich_mat) # interactions
+        dCdt = np.dot(C_Nr,N_K)
+        return dCdt
+    
+    def simulate_deterministic(self, t, method='BDF', rtol=1e-6, atol=1e-8, output_raw=False, overwrite=False):
+        """
+        Solve the ODEs for the system and update the species concentrations.
 
         Parameters:
         t (np.array): Time points for ODE solutions.
@@ -293,34 +248,49 @@ class NState:
         atol (float): Absolute tolerance for the solver. Default is 1e-8
         output_raw (bool): If True, return raw solver output. 
 
-        Returns:
-        Dict or None, depending on output_mode.
         """
+
         conc0 = np.array([np.atleast_1d(sp['conc'])[0] for _, sp in self.species.items()])
-        t_span = (t[0], t[-1])
         self.log_dcdts()
-        # num_reactions = self._rate_constants.shape[0] #used in faster alg
-        try:
-            solution = solve_ivp(
-                fun=lambda t, conc: self._dcdt_old(t, conc),
-                t_span=t_span, y0=conc0, t_eval=t, method=method, rtol=rtol, atol=atol
-            )
-            if not solution.success:
-                raise RuntimeError("ODE solver failed: " + solution.message)
 
+        solution = solve_ivp(self._dcdt, (t[0], t[-1]), conc0, method=method, t_eval=t, rtol=rtol, atol=atol)
+        if not solution.success:
+            raise RuntimeError("ODE solver failed: " + solution.message)
+        self.logger.info("ODEs solved successfully. Saving data...")
+
+        # Save time and conc arrays
+        save_index = 0
+        if self.t and not overwrite:
+            self.t = np.vstack((self.t, solution.t))
+            save_index = self.t.shape[0]-1
+            self.logger.info(f"Time array (t) saved to self.t[{save_index}]")
+        else: 
             self.t = t
+            self.logger.info(f"Time array (t) saved to self.t")
+        
+        if save_index > 0 and not overwrite:
             for name,data in self.species.items():
+                if data["conc"].shape == (1,):
+                    raise ValueError(f"Time/Conc desync. Concentration of '{name}' has zero previous replicates, but self.t has {save_index}")
+                data['conc'] = np.vstack((data['conc'], solution.y[data['index']]))
+                if save_index !=  data['conc'].shape[0]-1:
+                    raise ValueError(f"Time/Conc desync. Concentration of '{name}' has {data['conc'].shape[0]-1} previous replicates, but self.t has {save_index}")
+                self.logger.info(f"Concentration of {name} saved to self.species['{name}']['conc'][{save_index}]")
+        else:
+            for name,data in self.species.items():
+                if data["conc"].shape != (1,) and not overwrite:
+                    raise ValueError(f"Concentration of '{name}' has unexpected shape: {data['conc'].shape}")
                 data['conc'] = solution.y[data['index']]
+                self.logger.info(f"Concentration of {name} saved to self.species['{name}']['conc']")
 
-            self.logger.info("ODEs solved successfully.")
+        if output_raw:
+            self.logger.info("Returning raw solver output.")
+            return solution
+        else:
+            self.logger.info("Not returning raw solver output. Use output_raw=True to return raw data.")
+            return
+        
 
-            if output_raw:
-                return solution
-            else:
-                return
-        except Exception as e:
-            self.logger.error(f"Error in solving ODEs: {e}")
-            raise
     
     def simulate_stochastic(self, t, output_raw=False):
         """
@@ -333,6 +303,7 @@ class NState:
         Returns:
         Dict or None, depending on output_mode.
         """
+        #TODO: Although i do like the idea of being able to continue from a previous run, so add an option called "continue" which takes an integer which points to the index of the run that its continuing from
         # Initialize
         current_time = 0.0
         conc = np.array([np.atleast_1d(sp['conc'])[0] for _, sp in self.species.items()])

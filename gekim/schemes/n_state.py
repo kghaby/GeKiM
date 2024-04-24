@@ -238,7 +238,7 @@ class NState:
         dCdt = np.dot(C_Nr,N_K)
         return dCdt
 
-    def simulate_deterministic(self, t, conc0_dict=None, method='BDF', rtol=1e-6, atol=1e-8, output_raw=False):
+    def solve_odes(self, t, conc0_dict=None, method='BDF', rtol=1e-6, atol=1e-8, output_raw=False):
         """
         Solve the ODEs for the system and update the species concentrations.
 
@@ -301,7 +301,7 @@ class NState:
             self.logger.info("Not returning raw solver output. Use output_raw=True to return raw data.")
             return
         
-    def simulate_stochastic(self, t, output_raw=False):
+    def simulate(self, t, output_raw=False):
         """
         Simulate the system stochastically using the Gillespie algorithm.
 

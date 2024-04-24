@@ -43,7 +43,7 @@ system = gk.schemes.NState(scheme)
 
 # Define time points and simulate. In this example we're doing a deterministic simulation of the concentrations of each species. 
 t = np.linspace(0.0001, 1000, 10)
-system.solve_odes(t)
+system.solve_dcdts(t)
 
 # Fit the data to experimental models to extract mock-experimental measurements
 final_state = system.species["EI"]['conc']

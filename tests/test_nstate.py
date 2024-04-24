@@ -97,7 +97,7 @@ def _dcdt_old(system, t, concentrations):
             dcdt_arr[system.species[sp_name]['index']] += coeff * rate
     return dcdt_arr
 
-def _solve_odes_old(system, t, method='BDF', rtol=1e-6, atol=1e-8, output_raw=False):
+def _solve_dcdts_old(system, t, method='BDF', rtol=1e-6, atol=1e-8, output_raw=False):
     """
     Solve the ODEs for the system.
     """
@@ -129,8 +129,8 @@ def _solve_odes_old(system, t, method='BDF', rtol=1e-6, atol=1e-8, output_raw=Fa
 # Solve gekim systems 
 for name,scheme in schemes.items():
     system = gk.schemes.NState(scheme,quiet=True)
-    #sol = _solve_odes_old(system,t,output_raw=True) #testing with old (nonvectorized) version
-    sol = system.solve_odes(t,output_raw=True)
+    #sol = _solve_dcdts_old(system,t,output_raw=True) #testing with old (nonvectorized) version
+    sol = system.solve_dcdts(t,output_raw=True)
     final_state = system.species["EI"]['conc']
     all_bound = system.sum_conc(blacklist=["E","I"])
     fit_output = ci.kobs_uplim_fit_to_occ_final_wrt_t(

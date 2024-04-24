@@ -5,6 +5,8 @@ import logging
 import sys
 from scipy.integrate import solve_ivp
 from itertools import product
+from sympy import symbols, Matrix, prod, pretty, zeros, lambdify
+from ..utils import integerable_float
         
 class NState:
     #TODO: Add stochastic method
@@ -55,11 +57,15 @@ class NState:
         
         self._format_transitions()
         self._generate_matrices()
-        # self._construct_ode_mat() # replace with jacobian and proper ode matrices
+
+        self.log_dcdts()
+        
+        self.J_sym,self.J_num = self._generate_jac()
+        self.log_jac()
 
         #self.t = None # is it actually worth saving t?
         
-        self.logger.info(f"NState system initialized successfully.")
+        self.logger.info(f"NState system initialized successfully.\n")
     
     def reformat(self):
         """
@@ -112,6 +118,7 @@ class NState:
         match = re.match(r"(\d*\.?\d*)(\D.*)", species_str)
         if match and match.groups()[0]:
             coeff = float(match.groups()[0])
+            coeff = integerable_float(coeff)
         else:
             coeff = 1
         name = match.groups()[1] if match else species_str
@@ -147,10 +154,11 @@ class NState:
                 tr[direction] = [(name, coeff) for name, coeff in parsed_species.items()]
         return
 
+
+
     def log_dcdts(self,force_print=False):
         """
-        Log the ordinary differential equations for the concentrations of each species over time in a readable format.
-        Will write the coefficients used in the config.
+        Log the ordinary differential equations for the concentrations of each species over time.
         """
         dcdt_dict = {}
         max_header_length = 0
@@ -230,15 +238,77 @@ class NState:
         self._k_diag = np.diag(self._k_vec)
 
         return
-    
+
+    def _generate_jac(self):
+        """
+        Generate the symbolic Jacobian matrix and convert it to a numerical function.
+        Saves the symbolic matrix to self.J_sym and the numerical function to self.J_num.
+
+        The Jacobian matrix here represents the first-order partial derivatives of the rate of change equations
+        for each species with respect to all other species in the system.
+        """
+
+        sp_syms = {name: symbols(name) for name in self.species}
+        tr_syms = {name: symbols(name) for name in self.transitions}
+        n_species = len(self.species)
+        
+        # Collect rate laws for each transition
+        rate_laws = {}
+        for tr_name, tr in self.transitions.items():
+            rate_law = tr_syms[tr_name] * prod(sp_syms[sp_name]**coeff for sp_name, coeff in tr['from'])
+            rate_laws[tr_name] = rate_law
+
+        # Construct the ODEs
+        dcdt_vec = Matrix([0] * len(sp_syms))
+        for tr_name, tr in self.transitions.items():
+            for sp_name, coeff in tr['from']:
+                dcdt_vec[self.species[sp_name]['index']] -= coeff * rate_laws[tr_name]
+            for sp_name, coeff in tr['to']:
+                dcdt_vec[self.species[sp_name]['index']] += coeff * rate_laws[tr_name]
+        
+        # Get Jacobian
+        species_vec = Matrix(list(sp_syms.values()))
+        J_sym = dcdt_vec.jacobian(species_vec)
+        J_num = lambdify(species_vec, J_sym, 'numpy')
+
+        return J_sym,J_num
+      
+    def log_jac(self):
+        """
+        Log the symbolic representation of the Jacobian matrix.
+        The logged Jacobian includes row and column labels, but self.J_sym does not.
+
+        The Jacobian matrix here represents the first-order partial derivatives of the rate of change equations
+        for each species with respect to all other species in the system.
+        """
+        n_species = len(self.species)
+        J_log = zeros(n_species + 1, n_species + 1)
+        J_log[1:, 1:] = self.J_sym
+
+        for sp_name,sp_data in self.species.items():
+            J_log[0, sp_data['index']+1] = symbols(sp_name)
+            J_log[sp_data['index']+1, 0] = symbols(f'd[{sp_name}]/dt')
+        J_log[0,0] = symbols("_")
+
+        J_log_str = "Jacobian (including row and column labels):\n"
+        J_log_str += pretty((J_log),use_unicode=True)
+        J_log_str += "\n"
+        self.logger.info(J_log_str)
+        
+        return
+
     def _dcdt(self, t, conc):
+        """
+        Cannot model rates that are not simple power laws (eg dynamic inhibition or cooperativity). 
+        But these can be baked in on the schematic level I think.
+        """
         #TODO: Use higher dimensionality conc arrays to process multiple input concs at once
         C_Nr = np.prod(np.power(conc, self._stoich_reactant_mat), axis=1) # state dependencies
         N_K = np.dot(self._k_diag,self._stoich_mat) # interactions
         dCdt = np.dot(C_Nr,N_K)
         return dCdt
 
-    def solve_odes(self, t, conc0_dict=None, method='BDF', rtol=1e-6, atol=1e-8, output_raw=False):
+    def solve_dcdts(self, t, conc0_dict=None, method='BDF', rtol=1e-6, atol=1e-8, output_raw=False):
         """
         Solve the ODEs for the system and update the species concentrations.
 
@@ -258,8 +328,7 @@ class NState:
         """
         #TODO: add option to simulate to convergence
             # would help with low values of ligand and conc0 arrays where both ends of the spectrum need very different endpoints
-            # rougly predict how much time is needed. maybe by plugging
-        self.log_dcdts()
+            # rougly predict how much time is needed
         
         if conc0_dict:
             combinations = product(*(
@@ -289,7 +358,7 @@ class NState:
                 for i, solution in enumerate(solutions):
                     data['conc'][i] = solution.y[data['index']]
 
-        self.logger.info(f"{conc0_iterations_amt} concentration vectors of {name} saved to self.species['{name}']['conc']")
+        self.logger.info(f"{conc0_iterations_amt} concentration vectors saved to self.species[sp_name]['conc']")
 
         if output_raw:
             if conc0_iterations_amt == 1:

@@ -12,6 +12,15 @@ def rate_pair_from_P(intOOM,Pf):
     kb=10**(float(intOOM)+1)-kf
     return kf,kb
 
+def integerable_float(num):
+    """
+    Returns a float as an integer if it is an integer, otherwise returns the float.
+    """
+    if num.is_integer():
+        return int(num)
+    else:
+        return num
+    
 def round_sig(num, sig_figs, autoformat=True):
     """
     Round up using significant figures.

@@ -5,13 +5,17 @@ from . import fitting
 
 # TODO: fit to scheme. meaning yuo make a scheme without values for the transitions and fit it to occ data to see what values of rates satisfy curve
 # TODO: fitting can break with small occ values, like if using M units. Is this a limit of curve fit?
+# TODO: detect trivial solutions for curve fitting, like if all values are the same, or if all values are 0, or if all values are 1.
+# TODO: curve fit and defaults work best/expect normalized data, but the user may not know this. Add a check for this. Does Etot param contradict this?
+    # Can convert Etot to reasonable units for curve fitting
+
 def occ_final_wrt_t(t,kobs,Etot,uplim=1):
     '''
     Args:nondefault_params
         t: Array of timepoints.
         kobs: Observed rate constant.
         Etot: Total concentration of E across all species.
-        uplim: Scalar that sets the upper limit of the curve. 
+        uplim: Upper limit scalar of the curve. 
                The fraction of total E typically. Default=1, ie 100%. 
 
     Returns:
@@ -30,7 +34,7 @@ def kobs_uplim_fit_to_occ_final_wrt_t(t: np.array, occ_final: np.array, nondefau
             default_params = {
                 "kobs": {"fix": None, "guess": 0.01, "bounds": (0,np.inf)}, # Observed rate constant
                 "Etot": {"fix": None, "guess": 1, "bounds": (0,np.inf)},    # Total concentration of E over all species
-                "uplim": {"fix": None, "guess": 1, "bounds": (0,1)},   # Scalar that sets the upper limit of the curve
+                "uplim": {"fix": None, "guess": 1, "bounds": (0,np.inf)},   # Scales the upper limit of the curve
             }
 
     Returns:
@@ -74,7 +78,7 @@ def occ_total_wrt_t(t,kobs,concI0,KI,Etot,uplim=1):
         concI0: Initial concentration of the (saturating) inhibitor.
         KI: Inhibition constant, where kobs = kinact/2, analogous to K_M, K_D, and K_A. Must be in the same units as concI0.
         Etot: Total concentration of E across all species.
-        uplim: Scalar that sets the upper limit of the curve. 
+        uplim: Upper limit scalar of the curve. 
                The fraction of total E typically. Default=1, ie 100%. 
     
     Returns:
@@ -96,7 +100,7 @@ def kobs_KI_uplim_fit_to_occ_total_wrt_t(t: np.array, occ_tot: np.array, nondefa
             "concI0": {"fix": None, "guess": 100, "bounds": (0,np.inf)},
             "KI": {"fix": None, "guess": 10, "bounds": (0,np.inf)},
             "Etot": {"fix": None, "guess": 1, "bounds": (0,np.inf)},
-            "uplim": {"fix": None, "guess": 1, "bounds": (0,1)},        # Scalar that sets the upper limit of the curve
+            "uplim": {"fix": None, "guess": 1, "bounds": (0,1)},        # Scales the upper limit of the curve
         }
 
     Returns:

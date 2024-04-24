@@ -4,6 +4,7 @@ import copy
 import logging
 import sys
 from scipy.integrate import solve_ivp
+from itertools import product
         
 class NState:
     #TODO: Add stochastic method
@@ -56,7 +57,7 @@ class NState:
         self._generate_matrices()
         # self._construct_ode_mat() # replace with jacobian and proper ode matrices
 
-        self.t = None
+        #self.t = None # is it actually worth saving t?
         
         self.logger.info(f"NState system initialized successfully.")
     
@@ -219,8 +220,8 @@ class NState:
         for tr_name, tr in self.transitions.items():
             tr_idx = tr['index']
             self._k_vec[tr_idx] = tr['value']
-            reactant_vec = np.sum(self._unit_sp_mat[self.species[name]['index']] * coeff for name, coeff in tr['from'])
-            product_vec = np.sum(self._unit_sp_mat[self.species[name]['index']] * coeff for name, coeff in tr['to'])
+            reactant_vec = np.sum([self._unit_sp_mat[self.species[name]['index']] * coeff for name, coeff in tr['from']],axis=0)
+            product_vec = np.sum([self._unit_sp_mat[self.species[name]['index']] * coeff for name, coeff in tr['to']],axis=0)
             
             self._stoich_reactant_mat[tr_idx, :] = reactant_vec  
             #self._stoich_product_mat[tr_idx, :] = product_vec   # not used
@@ -229,69 +230,77 @@ class NState:
         self._k_diag = np.diag(self._k_vec)
 
         return
-
+    
     def _dcdt(self, t, conc):
+        #TODO: Use higher dimensionality conc arrays to process multiple input concs at once
         C_Nr = np.prod(np.power(conc, self._stoich_reactant_mat), axis=1) # state dependencies
         N_K = np.dot(self._k_diag,self._stoich_mat) # interactions
         dCdt = np.dot(C_Nr,N_K)
         return dCdt
-    
-    def simulate_deterministic(self, t, method='BDF', rtol=1e-6, atol=1e-8, output_raw=False, overwrite=False):
+
+    def simulate_deterministic(self, t, conc0_dict=None, method='BDF', rtol=1e-6, atol=1e-8, output_raw=False):
         """
         Solve the ODEs for the system and update the species concentrations.
 
         Parameters:
         t (np.array): Time points for ODE solutions.
-        method (str): Integration method, default is 'BDF'.
 
+        conc0_dict (dict: {str:np.array}): Dictionary of {species_name: conc0_arr} pairs for initial concentrations to simulate. 
+            Unprovided species will use self.species['name']['conc'][0] as a single-point initial concentration.
+            Using multiple conc0's will nest the concentrations in an array and raw solutions in a list.
+            Default is None, ie all initial concentrations are single point from the self.species dict.
+            Example: {"Ligand":np.linspace(1,1500,100)} for a Michaelis-Menten ligand concentration scan.
+        method (str): Integration method, default is 'BDF'.
         rtol (float): Relative tolerance for the solver. Default is 1e-6
         atol (float): Absolute tolerance for the solver. Default is 1e-8
         output_raw (bool): If True, return raw solver output. 
 
         """
-
-        conc0 = np.array([np.atleast_1d(sp['conc'])[0] for _, sp in self.species.items()])
+        #TODO: add option to simulate to convergence
+            # would help with low values of ligand and conc0 arrays where both ends of the spectrum need very different endpoints
+            # rougly predict how much time is needed. maybe by plugging
         self.log_dcdts()
+        
+        if conc0_dict:
+            combinations = product(*(
+                np.atleast_1d(conc0_dict.get(sp_name, [np.atleast_1d(sp_data['conc']).flatten()[0]])) 
+                for sp_name, sp_data in self.species.items()
+            ))
+            conc0_mat = np.vstack([comb for comb in combinations])
+        else:
+            conc0_mat = np.atleast_2d([np.atleast_1d(sp_data['conc']).flatten()[0] for _, sp_data in self.species.items()])
+        conc0_iterations_amt = conc0_mat.shape[0]
 
-        solution = solve_ivp(self._dcdt, (t[0], t[-1]), conc0, method=method, t_eval=t, rtol=rtol, atol=atol)
-        if not solution.success:
-            raise RuntimeError("ODE solver failed: " + solution.message)
+        solutions = []
+        for conc0 in conc0_mat:
+            solution = solve_ivp(self._dcdt, (t[0], t[-1]), conc0, method=method, t_eval=t, rtol=rtol, atol=atol) # vectorized=True makes it slower I think bc low len(conc0)
+            if not solution.success:
+                raise RuntimeError("ODE solver failed: " + solution.message)
+            solutions.append(solution)
+            
         self.logger.info("ODEs solved successfully. Saving data...")
 
-        # Save time and conc arrays
-        save_index = 0
-        if self.t and not overwrite:
-            self.t = np.vstack((self.t, solution.t))
-            save_index = self.t.shape[0]-1
-            self.logger.info(f"Time array (t) saved to self.t[{save_index}]")
-        else: 
-            self.t = t
-            self.logger.info(f"Time array (t) saved to self.t")
-        
-        if save_index > 0 and not overwrite:
-            for name,data in self.species.items():
-                if data["conc"].shape == (1,):
-                    raise ValueError(f"Time/Conc desync. Concentration of '{name}' has zero previous replicates, but self.t has {save_index}")
-                data['conc'] = np.vstack((data['conc'], solution.y[data['index']]))
-                if save_index !=  data['conc'].shape[0]-1:
-                    raise ValueError(f"Time/Conc desync. Concentration of '{name}' has {data['conc'].shape[0]-1} previous replicates, but self.t has {save_index}")
-                self.logger.info(f"Concentration of {name} saved to self.species['{name}']['conc'][{save_index}]")
-        else:
-            for name,data in self.species.items():
-                if data["conc"].shape != (1,) and not overwrite:
-                    raise ValueError(f"Concentration of '{name}' has unexpected shape: {data['conc'].shape}")
+        for name, data in self.species.items():
+            conc_shape = (conc0_iterations_amt,len(t))
+            if conc0_iterations_amt == 1:
                 data['conc'] = solution.y[data['index']]
-                self.logger.info(f"Concentration of {name} saved to self.species['{name}']['conc']")
+            else:
+                data['conc'] = np.zeros(conc_shape)
+                for i, solution in enumerate(solutions):
+                    data['conc'][i] = solution.y[data['index']]
+
+        self.logger.info(f"{conc0_iterations_amt} concentration vectors of {name} saved to self.species['{name}']['conc']")
 
         if output_raw:
-            self.logger.info("Returning raw solver output.")
-            return solution
+            if conc0_iterations_amt == 1:
+                self.logger.info("Returning raw solver output.")
+                return solutions[0]
+            self.logger.info("Returning list of raw solver outputs.")        
+            return solutions
         else:
             self.logger.info("Not returning raw solver output. Use output_raw=True to return raw data.")
             return
         
-
-    
     def simulate_stochastic(self, t, output_raw=False):
         """
         Simulate the system stochastically using the Gillespie algorithm.

@@ -108,7 +108,7 @@ def _simulate_deterministic_old(system, t, method='BDF', rtol=1e-6, atol=1e-8, o
     try:
         solution = solve_ivp(
             fun=lambda t, conc: _dcdt_old(system, t, conc),
-            t_span=t_span, y0=conc0, t_eval=t, method=method, rtol=rtol, atol=atol
+            t_span=t_span, y0=conc0, t_eval=t, method=method, rtol=rtol, atol=atol,
         )
         if not solution.success:
             raise RuntimeError("ODE solver failed: " + solution.message)

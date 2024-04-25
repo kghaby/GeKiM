@@ -8,6 +8,7 @@ from . import fitting
 # TODO: detect trivial solutions for curve fitting, like if all values are the same, or if all values are 0, or if all values are 1.
 # TODO: curve fit and defaults work best/expect normalized data, but the user may not know this. Add a check for this. Does Etot param contradict this?
     # Can convert Etot to reasonable units for curve fitting
+#TODO: time arrays that are not evenly spaced will hurt curve fitting. 
 
 def occ_final_wrt_t(t,kobs,Etot,uplim=1):
     '''

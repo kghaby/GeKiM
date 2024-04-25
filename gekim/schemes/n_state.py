@@ -56,14 +56,14 @@ class NState:
             self.transitions[name]['index'] = idx
         
         self._format_transitions()
-        self._generate_matrices()
+        self._generate_matrices() # generates self._unit_sp_mat, self._stoich_mat, self._stoich_reactant_mat, self._k_vec, self._k_diag
 
         self.log_dcdts()
         
-        self.J_sym,self.J_num = self._generate_jac()
+        self._generate_jac() # generates self.J_sym, self.J_symsp_numtr, self.J_func_wrap
         self.log_jac()
 
-        #self.t = None # is it actually worth saving t?
+        self.t_dcdts = None # is it actually worth saving t?
         
         self.logger.info(f"NState system initialized successfully.\n")
     
@@ -242,7 +242,10 @@ class NState:
     def _generate_jac(self):
         """
         Generate the symbolic Jacobian matrix and convert it to a numerical function.
-        Saves the symbolic matrix to self.J_sym and the numerical function to self.J_num.
+        Saves the symbolic Jacobian to self.J_sym and the (wrapped) numerical function to self.J_func_wrap(t,y).
+        Also saves a Jacobian with symbolic species and numeric transition rate constants to self.J_symsp_numtr.
+
+        The wrapped numerical function is time-independent even though it accepts t as an argument!
 
         The Jacobian matrix here represents the first-order partial derivatives of the rate of change equations
         for each species with respect to all other species in the system.
@@ -250,28 +253,42 @@ class NState:
 
         sp_syms = {name: symbols(name) for name in self.species}
         tr_syms = {name: symbols(name) for name in self.transitions}
+        tr_values = {name: self.transitions[name]['value'] for name in self.transitions}
         n_species = len(self.species)
         
-        # Collect rate laws for each transition
-        rate_laws = {}
-        for tr_name, tr in self.transitions.items():
-            rate_law = tr_syms[tr_name] * prod(sp_syms[sp_name]**coeff for sp_name, coeff in tr['from'])
-            rate_laws[tr_name] = rate_law
+        def make_dcdt_vec(tr_dict):
+            # Rate laws using transition dictionary 
+            rate_laws = {
+                tr_name: tr_dict[tr_name] * prod(sp_syms[sp_name]**coeff for sp_name, coeff in tr['from'])
+                for tr_name, tr in self.transitions.items()
+            }
+            # Construct the ODEs
+            dcdt_vec = Matrix([0] * len(sp_syms))
+            for tr_name, tr in self.transitions.items():
+                for sp_name, coeff in tr['from']:
+                    dcdt_vec[self.species[sp_name]['index']] -= coeff * rate_laws[tr_name]
+                for sp_name, coeff in tr['to']:
+                    dcdt_vec[self.species[sp_name]['index']] += coeff * rate_laws[tr_name]
+            return dcdt_vec
+    
 
-        # Construct the ODEs
-        dcdt_vec = Matrix([0] * len(sp_syms))
-        for tr_name, tr in self.transitions.items():
-            for sp_name, coeff in tr['from']:
-                dcdt_vec[self.species[sp_name]['index']] -= coeff * rate_laws[tr_name]
-            for sp_name, coeff in tr['to']:
-                dcdt_vec[self.species[sp_name]['index']] += coeff * rate_laws[tr_name]
+        # Rate laws using symbolic transition names for readability in addition to symbolic species names
+        dcdt_vec_sym = make_dcdt_vec(tr_syms)
         
-        # Get Jacobian
+        # Rate laws for actual computation with only symbolic species names
+        dcdt_vec_num = make_dcdt_vec(tr_values)
+        
         species_vec = Matrix(list(sp_syms.values()))
-        J_sym = dcdt_vec.jacobian(species_vec)
-        J_num = lambdify(species_vec, J_sym, 'numpy')
 
-        return J_sym,J_num
+        # Symbolic Jacobian
+        self.J_sym = dcdt_vec_sym.jacobian(species_vec)
+
+        # Numerical Jacobian
+        self.J_symsp_numtr = dcdt_vec_num.jacobian(species_vec) # Symbolic species, numeric transition rate constants
+        J_func = lambdify(species_vec, self.J_symsp_numtr, 'numpy') # Make numerical function. Accepts 
+        self.J_func_wrap = lambda t, y: J_func(*y) # Wrap J_func so that t,y is passed to the function to be compatible with solve_ivp
+
+        return
       
     def log_jac(self):
         """
@@ -299,8 +316,8 @@ class NState:
 
     def _dcdt(self, t, conc):
         """
-        Cannot model rates that are not simple power laws (eg dynamic inhibition or cooperativity). 
-        But these can be baked in on the schematic level I think.
+        Cannot model rates that are not simple power laws (eg dynamic inhibition, cooperativity, time dependent params). 
+        But most of these can be baked in on the schematic level I think. 
         """
         #TODO: Use higher dimensionality conc arrays to process multiple input concs at once
         C_Nr = np.prod(np.power(conc, self._stoich_reactant_mat), axis=1) # state dependencies
@@ -308,7 +325,7 @@ class NState:
         dCdt = np.dot(C_Nr,N_K)
         return dCdt
 
-    def solve_dcdts(self, t, conc0_dict=None, method='BDF', rtol=1e-6, atol=1e-8, output_raw=False):
+    def solve_dcdts(self, t_eval=None, t_span=None, conc0_dict=None, method='BDF', rtol=1e-6, atol=1e-8, output_raw=False):
         """
         Solve the ODEs for the system and update the species concentrations.
 
@@ -326,10 +343,12 @@ class NState:
         output_raw (bool): If True, return raw solver output. 
 
         """
-        #TODO: add option to simulate to convergence
-            # would help with low values of ligand and conc0 arrays where both ends of the spectrum need very different endpoints
-            # rougly predict how much time is needed
-        
+        #TODO: check how combinations are arranged and make sure its intuitive to separate and use them (ie the indexing is clear)
+        #TODO: see if dense output could be useful for providing an equal time vector for all conc0's
+            #TODO: maybe add an option to map time and conc on an evenly spaced grid
+        #TODO: More analytically approximate the time scale.
+            # incorporate the network of transitions, nonlinearity, etc?
+            # Linear scaling of the inverse min eigenvalue underestimates when conc0E ~= conc0I
         if conc0_dict:
             combinations = product(*(
                 np.atleast_1d(conc0_dict.get(sp_name, [np.atleast_1d(sp_data['conc']).flatten()[0]])) 
@@ -338,30 +357,51 @@ class NState:
             conc0_mat = np.vstack([comb for comb in combinations])
         else:
             conc0_mat = np.atleast_2d([np.atleast_1d(sp_data['conc']).flatten()[0] for _, sp_data in self.species.items()])
-        conc0_iterations_amt = conc0_mat.shape[0]
+        conc0_mat_len = len(conc0_mat)
+        if conc0_mat_len != 1:
+            self.logger.info(f"Simulating {conc0_mat_len} initial concentration vectors...")
 
         solutions = []
         for conc0 in conc0_mat:
-            solution = solve_ivp(self._dcdt, (t[0], t[-1]), conc0, method=method, t_eval=t, rtol=rtol, atol=atol) # vectorized=True makes it slower I think bc low len(conc0)
+            if t_span is None:
+                if t_eval is None:
+                    # Estimate the timespan needed for convergence based on the smallest magnitude of the Jacobian eigenvalues at initial conditions
+                    eigenvalues = np.linalg.eigvals(self.J_func_wrap(None, conc0))
+                    eigenvalue_threshold = 1e-6 # below 1e-6 is considered insignificant. float32 cutoff maybe
+                    filtered_eigenvalues = eigenvalues[np.abs(eigenvalues) > eigenvalue_threshold] 
+                    if filtered_eigenvalues.size == 0:
+                        raise ValueError("No eigenvalues above the threshold, unable to estimate time scale.")
+                    naive_time_scale = 1 / (np.abs(filtered_eigenvalues).min())
+                    naive_time_scale = naive_time_scale * 6.5
+                    t_span = (0, naive_time_scale) # Start at 0 or np.abs(filtered_eigenvalues).min()?
+                    #print(f"Estimated time scale: {naive_time_scale:.2e}")
+                    
+                else:
+                    t_span = (t_eval[0], t_eval[-1])
+
+            solution = solve_ivp(self._dcdt, t_span=t_span, y0=conc0, method=method, t_eval=t_eval, rtol=rtol, atol=atol, jac=self.J_func_wrap) 
+                # vectorized=True makes legacy dcdt func slower bc low len(conc0) I think
             if not solution.success:
-                raise RuntimeError("ODE solver failed: " + solution.message)
+                raise RuntimeError("FAILED: " + solution.message)
             solutions.append(solution)
             
         self.logger.info("ODEs solved successfully. Saving data...")
 
-        for name, data in self.species.items():
-            conc_shape = (conc0_iterations_amt,len(t))
-            if conc0_iterations_amt == 1:
+        if conc0_mat_len == 1:
+            self.t_dcdts = solution.t
+            self.logger.info(f"\tTime saved to self.t_dcdts (np.array)")
+            for _, data in self.species.items():
                 data['conc'] = solution.y[data['index']]
-            else:
-                data['conc'] = np.zeros(conc_shape)
-                for i, solution in enumerate(solutions):
-                    data['conc'][i] = solution.y[data['index']]
-
-        self.logger.info(f"{conc0_iterations_amt} concentration vectors saved to self.species[sp_name]['conc']")
-
+            self.logger.info(f"\tConcentrations saved to self.species[sp_name]['conc'] (np.array)")
+        else:
+            self.t_dcdts = [solution.t for solution in solutions] 
+            self.logger.info(f"\t{conc0_mat_len} time vectors saved to self.t_dcdts (list of np.arrays)")
+            for _, data in self.species.items():
+                data['conc'] = [solution.y[data['index']] for solution in solutions]
+            self.logger.info(f"\t{conc0_mat_len} concentration vectors saved to self.species[sp_name]['conc'] (list of np.arrays)")
+        
         if output_raw:
-            if conc0_iterations_amt == 1:
+            if conc0_mat_len == 1:
                 self.logger.info("Returning raw solver output.")
                 return solutions[0]
             self.logger.info("Returning list of raw solver outputs.")        

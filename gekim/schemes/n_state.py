@@ -449,6 +449,7 @@ class NState:
         Dict or None, depending on output_mode.
         """
         #TODO: Although i do like the idea of being able to continue from a previous run, so add an option called "continue" which takes an integer which points to the index of the run that its continuing from
+        #TODO: show pop dist is like odes
         # Initialize
         current_time = 0.0
         conc = np.array([np.atleast_1d(sp['conc'])[0] for _, sp in self.species.items()])

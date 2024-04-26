@@ -319,34 +319,47 @@ class NState:
         Cannot model rates that are not simple power laws (eg dynamic inhibition, cooperativity, time dependent params). 
         But most of these can be baked in on the schematic level I think. 
         """
-        #TODO: Use higher dimensionality conc arrays to process multiple input concs at once
+        #TODO: Use higher dimensionality conc arrays to process multiple input concs at once? Hard
         C_Nr = np.prod(np.power(conc, self._stoich_reactant_mat), axis=1) # state dependencies
         N_K = np.dot(self._k_diag,self._stoich_mat) # interactions
         dCdt = np.dot(C_Nr,N_K)
         return dCdt
 
-    def solve_dcdts(self, t_eval=None, t_span=None, conc0_dict=None, method='BDF', rtol=1e-6, atol=1e-8, output_raw=False):
+    def solve_dcdts(self, t_eval=None, t_span=None, conc0_dict=None, method='BDF', rtol=1e-6, atol=1e-8, 
+                    output_raw=False, dense_output=False):
         """
-        Solve the ODEs for the system and update the species concentrations.
+        Solve the ODEs of species concentration wrt time for the system. 
+        Will update self.species['conc'] with the respective solutions.
 
-        Parameters:
-        t (np.array): Time points for ODE solutions.
+        Arguments:
+        t_eval (np.array): Time points for ODE solutions.
+
+        t_span (tuple): Time span for ODE solutions.
 
         conc0_dict (dict: {str:np.array}): Dictionary of {species_name: conc0_arr} pairs for initial concentrations to simulate. 
-            Unprovided species will use self.species['name']['conc'][0] as a single-point initial concentration.
+            Unprovided species will use self.species[name]['conc'][0] as a single-point initial concentration.
             Using multiple conc0's will nest the concentrations in an array and raw solutions in a list.
+                The conc0 combinations are saved to self.conc0_mat. 
+                If not using conc0_dict, self.conc0_mat will still be set to the single conc0 vector. 
             Default is None, ie all initial concentrations are single point from the self.species dict.
             Example: {"Ligand":np.linspace(1,1500,100)} for a Michaelis-Menten ligand concentration scan.
+        
         method (str): Integration method, default is 'BDF'.
+
         rtol (float): Relative tolerance for the solver. Default is 1e-6
+            
         atol (float): Absolute tolerance for the solver. Default is 1e-8
-        output_raw (bool): If True, return raw solver output. 
+
+        output_raw (bool): If True, return raw solver output.
+
+        dense_output (bool): If True, save a scipy.integrate.OdeSolution instance to self.soln_continuous(t)
+            If using multiple conc0's, this will be a list of functions that share indexing with the other outputs,
+                and can be called like "self.soln_continuous[idx](t)".
+            Access a specific species conc like soln_continuous(t)[self.species[name]['index']].
 
         """
         #TODO: check how combinations are arranged and make sure its intuitive to separate and use them (ie the indexing is clear)
-        #TODO: see if dense output could be useful for providing an equal time vector for all conc0's
-            #TODO: maybe add an option to map time and conc on an evenly spaced grid
-        #TODO: More analytically approximate the time scale.
+        #TODO: More analytically approximate the time scale. Hard
             # incorporate the network of transitions, nonlinearity, etc?
             # Linear scaling of the inverse min eigenvalue underestimates when conc0E ~= conc0I
         if conc0_dict:
@@ -360,8 +373,9 @@ class NState:
         conc0_mat_len = len(conc0_mat)
         if conc0_mat_len != 1:
             self.logger.info(f"Simulating {conc0_mat_len} initial concentration vectors...")
+        self.conc0_mat = conc0_mat
 
-        solutions = []
+        solns = []
         for conc0 in conc0_mat:
             if t_span is None:
                 if t_eval is None:
@@ -379,35 +393,48 @@ class NState:
                 else:
                     t_span = (t_eval[0], t_eval[-1])
 
-            solution = solve_ivp(self._dcdt, t_span=t_span, y0=conc0, method=method, t_eval=t_eval, rtol=rtol, atol=atol, jac=self.J_func_wrap) 
+            soln = solve_ivp(self._dcdt, t_span=t_span, y0=conc0, method=method, t_eval=t_eval, 
+                                rtol=rtol, atol=atol, jac=self.J_func_wrap, dense_output=dense_output) 
                 # vectorized=True makes legacy dcdt func slower bc low len(conc0) I think
-            if not solution.success:
-                raise RuntimeError("FAILED: " + solution.message)
-            solutions.append(solution)
+            if not soln.success:
+                raise RuntimeError("FAILED: " + soln.message)
+            solns.append(soln)
             
         self.logger.info("ODEs solved successfully. Saving data...")
 
         if conc0_mat_len == 1:
-            self.t_dcdts = solution.t
+            self.t_dcdts = soln.t
             self.logger.info(f"\tTime saved to self.t_dcdts (np.array)")
             for _, data in self.species.items():
-                data['conc'] = solution.y[data['index']]
-            self.logger.info(f"\tConcentrations saved to self.species[sp_name]['conc'] (np.array)")
+                data['conc'] = soln.y[data['index']]
+            self.logger.info(f"\tConcentrations saved respectively to self.species[sp_name]['conc'] (np.array)")
+            if dense_output:
+                self.soln_continuous = soln.sol
+                self.logger.info(f"\tSaving continuous solution function to self.soln_continuous(t) (scipy.integrate.OdeSolution)")
+            else:
+                self.soln_continuous = None
+                self.logger.info("\tNot saving continuous solution. Use dense_output=True to save it to self.soln_continuous")
         else:
-            self.t_dcdts = [solution.t for solution in solutions] 
+            self.t_dcdts = [soln.t for soln in solns] 
             self.logger.info(f"\t{conc0_mat_len} time vectors saved to self.t_dcdts (list of np.arrays)")
             for _, data in self.species.items():
-                data['conc'] = [solution.y[data['index']] for solution in solutions]
-            self.logger.info(f"\t{conc0_mat_len} concentration vectors saved to self.species[sp_name]['conc'] (list of np.arrays)")
+                data['conc'] = [soln.y[data['index']] for soln in solns]
+            self.logger.info(f"\t{conc0_mat_len} concentration vectors saved respectively to self.species[sp_name]['conc'] (list of np.arrays)")
+            if dense_output:
+                self.soln_continuous = [soln.sol for soln in solns] 
+                self.logger.info(f"\tSaving list of continuous solution functions to self.soln_continuous (list of scipy.integrate.OdeSolution's)")
+            else:
+                self.soln_continuous = None
+                self.logger.info("\tNot saving continuous solutions. Use dense_output=True to save them to self.soln_continuous")
         
         if output_raw:
             if conc0_mat_len == 1:
-                self.logger.info("Returning raw solver output.")
-                return solutions[0]
-            self.logger.info("Returning list of raw solver outputs.")        
-            return solutions
+                self.logger.info("Returning raw solver output.\n")
+                return solns[0]
+            self.logger.info("Returning list of raw solver outputs.\n")        
+            return solns
         else:
-            self.logger.info("Not returning raw solver output. Use output_raw=True to return raw data.")
+            self.logger.info("Not returning raw solver output. Use output_raw=True to return raw data.\n")
             return
         
     def simulate(self, t, output_raw=False):
@@ -505,6 +532,15 @@ class NState:
 
         return total_concentration
 
+    def conc_mat2dict(self,conc_mat):
+        """
+        Save species vectors from a concentration matrix to the respective species[name]['conc'] based on species[name]['index'].
+        Useful for saving the output of a continuous solution to the species dictionary.
+            Don't forget `system.t_dcdts = t`
+        """
+        for _, sp_data in self.species.items():
+            sp_data['conc'] = conc_mat[sp_data['index']]
+        return
 
 
 

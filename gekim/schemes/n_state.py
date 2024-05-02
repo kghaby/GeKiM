@@ -10,7 +10,8 @@ from ..utils import integerable_float
         
 class NState:
     #TODO: Add stochastic method
-    #TODO: logger retains previous classes? Jupyter output was showing previous class logs i think. Happens sometimes
+    #TODO: use sympy for odes so that massive scheme odes are easily dictionaried and utilized
+
     
     def __init__(self, config, logfilename=None, quiet=False):
         """
@@ -87,10 +88,14 @@ class NState:
         Returns:
         bool: True if valid, False otherwise.
         """
+        #TODO: use assign color 
         labels = set()
         for name, data in self.species.items():
             # Validate labels
             label = data.get('label',name)
+            if 'label' not in data.keys():
+                self.logger.info(f"Label not found for species '{name}'. Using species name as label.")
+                self.species[name]['label'] = name
             if label in labels:
                 self.logger.error(f"Duplicate label '{label}' found for species '{name}'.")
                 return False
@@ -98,7 +103,7 @@ class NState:
         
             # Validate concentrations
             if not 'conc' in data.keys():
-                raise ValueError("Initial concentration not found in species[name]['conc'].")
+                raise ValueError(f"Initial concentration not found in species['{name}']['conc'].")
             conc = data.get('conc')
             if not isinstance(conc, np.ndarray):
                 data['conc'] = np.array([conc])
@@ -359,9 +364,11 @@ class NState:
 
         """
         #TODO: check how combinations are arranged and make sure its intuitive to separate and use them (ie the indexing is clear)
-        #TODO: More analytically approximate the time scale. Hard
+        #TODO: More analytically approximate the time scale.
             # incorporate the network of transitions, nonlinearity, etc?
             # Linear scaling of the inverse min eigenvalue underestimates when conc0E ~= conc0I
+            # Linearize system then use normal mode frequency of linear system (1/(sqrt(smallest eigenvalue))?
+            # needs to be an n-dimensional function, where n is the degree of (non)linearity 
         if conc0_dict:
             combinations = product(*(
                 np.atleast_1d(conc0_dict.get(sp_name, [np.atleast_1d(sp_data['conc']).flatten()[0]])) 

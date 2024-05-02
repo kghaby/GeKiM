@@ -8,7 +8,8 @@ from . import fitting
 # TODO: detect trivial solutions for curve fitting, like if all values are the same, or if all values are 0, or if all values are 1.
 # TODO: curve fit and defaults work best/expect normalized data, but the user may not know this. Add a check for this. Does Etot param contradict this?
     # Can convert Etot to reasonable units for curve fitting
-#TODO: time arrays that are not evenly spaced will hurt curve fitting. 
+#TODO: time arrays that are not evenly spaced will hurt curve fitting.
+#TODO: accept dense output so a custom time array can be passed. this will help with starts misrepresenting the fit like for total occ not getting the right KI 
 
 def occ_final_wrt_t(t,kobs,Etot,uplim=1):
     '''
@@ -157,7 +158,7 @@ def KI_kinact_n_fit_to_kobs_wrt_concI0(concI0: np.array, kobs: np.array, nondefa
             default_params = {
                 "KI": {"fix": None, "guess": 100, "bounds": (0,np.inf)},
                 "kinact": {"fix": None, "guess": 0.01, "bounds": (0,np.inf)},
-                "n": {"fix": 1, "guess": 1, "bounds": (-np.inf,np.inf)}, 
+                "n": {"fix": 1, "guess": 1, "bounds": (-np.inf,np.inf)}, # fix overrides guess, so set fix to None if you wish to include this 
             }
 
     Returns:
@@ -223,6 +224,7 @@ class Experiments:
     """
     Common place for experimental setups in covalent inhibition literature.
     """
+    #TODO: timecourse and KI/kinact 
     @staticmethod
     def timecourse(t,system):
         return NotImplementedError()

@@ -1,4 +1,5 @@
 import numpy as np
+#TODO: scheme fitting
 
 def chi_squared(observed_data, fitted_data, fitted_params, variances=None, reduced=False):
     """

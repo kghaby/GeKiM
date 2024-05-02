@@ -2,6 +2,8 @@ import numpy as np
 import math
 import colorsys
 
+#TODO: pathfinder that counts and lists all possible paths between two species
+
 def rate_pair_from_P(intOOM,Pf):
     """
     Provides rates between two states that are at rapid equilibrium and therefore approximated by the population distribution. 
@@ -59,6 +61,7 @@ class Plotting:
         Returns:
             dict: Updated schemes with assigned colors. Edits original input dict.
         """
+        #TODO: handle list of schemes and NState class
         if not isinstance(schemes, dict):
             raise ValueError("Input should be a dictionary of schemes or a single scheme formatted as a dictionary.")
         

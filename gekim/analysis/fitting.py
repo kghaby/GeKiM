@@ -1,5 +1,6 @@
 import numpy as np
 #TODO: scheme fitting
+#TODO: gaussian_kde from scipy.stats for reweighting unevenly spaced data points
 
 def chi_squared(observed_data, fitted_data, fitted_params, variances=None, reduced=False):
     """

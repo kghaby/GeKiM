@@ -368,7 +368,9 @@ class NState:
             # incorporate the network of transitions, nonlinearity, etc?
             # Linear scaling of the inverse min eigenvalue underestimates when conc0E ~= conc0I
             # Linearize system then use normal mode frequency of linear system (1/(sqrt(smallest eigenvalue))?
-            # needs to be an n-dimensional function, where n is the degree of (non)linearity 
+            # needs to be an n-dimensional function, where n is the degree of (non)linearity
+        #TODO: smarter way to choose rtol and atol. M-scale kon and nM-scale conc cause wild issues that are resolved with changing rtol and atol from default
+            # at least a warning if a weird solution is found 
         if conc0_dict:
             combinations = product(*(
                 np.atleast_1d(conc0_dict.get(sp_name, [np.atleast_1d(sp_data['conc']).flatten()[0]])) 

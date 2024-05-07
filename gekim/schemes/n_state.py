@@ -11,7 +11,7 @@ from ..utils import integerable_float
 #TODO: find_linear_paths in kinetics2 and more general pathfinder in utils?
     
 class Species:
-    def __init__(self, name: str, conc: , label=None):
+    def __init__(self, name: str, conc: np.ndarray|float, label=None):
         self.name = name
         self.conc = np.array([conc]) if np.isscalar(conc) else np.array(conc)
         self.label = label or name

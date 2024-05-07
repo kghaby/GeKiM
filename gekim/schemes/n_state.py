@@ -42,38 +42,47 @@ class NState:
         self.logger.addHandler(stream_handler)
 
         self._validate_config(config)
-        
         self.config = copy.deepcopy(config)
     
         self.species = self.config['species']
+        self.transitions = self.config['transitions']
+        self.setup()
+        self.logger.info(f"NState system initialized successfully.\n")
+    
+    def setup(self):
+        """
+        Use this if you added transitions or species after initialization.
+        This is called in __init__ so you don't need to call it again unless you change the scheme.
+        WARNING: This will basically reinitialize everything besides the logger and config.
+        """
+        #TODO: this needs testing. Make sure that its fine to not reinit the concentrations
         # Document the order of the species
-        for idx, name in enumerate(self.config['species']):
+        for idx, name in enumerate(self.species):
             self.species[name]['index'] = idx
         self._validate_species()
-
-        self.transitions = self.config['transitions']
+            
         # Document the order of the transitions
-        for idx, name in enumerate(self.config['transitions']):
+        for idx, name in enumerate(self.transitions):
             self.transitions[name]['index'] = idx
         
         self._format_transitions()
-        self._generate_matrices() # generates self._unit_sp_mat, self._stoich_mat, self._stoich_reactant_mat, self._k_vec, self._k_diag
+        self._generate_matrices_for_rates() # generates self._unit_sp_mat, self._stoich_mat, self._stoich_reactant_mat, self._k_vec, self._k_diag
 
+        sp_syms = {name: symbols(name) for name in self.species}
+        tr_syms = {name: symbols(name) for name in self.transitions}
+
+        # Rate laws (dCdt)
+        self._generate_dcdts_sym(sp_syms,tr_syms) # generates self.dcdts_sym and self.dcdts_numk
         self.log_dcdts()
-        
-        self._generate_jac() # generates self.J_sym, self.J_symsp_numtr, self.J_func_wrap
+        tr_sym2num = {symbols(name): tr['value'] for name, tr in self.transitions.items()}
+        self.dcdts_numk = self.dcdts_sym.subs(tr_sym2num)
+        # self._lambdify_sym_dcdts(sp_syms) # Overwrites self._dcdt with a lambdified version of self.dcdts_sym
+        self.t_dcdts = None 
+
+        # Jacobian
+        self._generate_jac(sp_syms) # generates self.J_sym, self.J_symsp_numtr, self.J_func_wrap
         self.log_jac()
 
-        self.t_dcdts = None # is it actually worth saving t?
-        
-        self.logger.info(f"NState system initialized successfully.\n")
-    
-    def reformat(self):
-        """
-        Use this if you added transitions or species after initialization.
-        """
-        self._format_transitions()
-        self._generate_matrices()
         return
 
     def _validate_config(self,config):
@@ -159,11 +168,44 @@ class NState:
                 tr[direction] = [(name, coeff) for name, coeff in parsed_species.items()]
         return
 
+    def _generate_dcdts_sym(self,sp_syms,tr_syms):
+        """
+        Generate symbolic rate laws for each species.
+        """
+        # Generate dCdt's with symbolic species and rate constants 
+        dcdts_sym = Matrix([0] * len(sp_syms))
+        for tr_name, tr in self.transitions.items():
+            unscaled_rate = tr_syms[tr_name] * prod(sp_syms[sp_name]**coeff for sp_name, coeff in tr['from'])
+            for sp_name, coeff in tr['from']:
+                dcdts_sym[self.species[sp_name]['index']] -= coeff * unscaled_rate
+            for sp_name, coeff in tr['to']:
+                dcdts_sym[self.species[sp_name]['index']] += coeff * unscaled_rate
+        self.dcdts_sym = dcdts_sym 
 
+        # Assign each dcdt to the respective species
+        for sp_name, sp_data in self.species.items():
+            sp_data['dcdt'] = dcdts_sym[sp_data['index']]
+        self.logger.info("Assigned symbolic dCdt's to species (self.species[NAME]['dcdt']).\n")
+
+        # Substitute rate constant symbols for values 
+        tr_sym2num = {symbols(name): tr['value'] for name, tr in self.transitions.items()}
+        self.dcdts_numk = self.dcdts_sym.subs(tr_sym2num)
+        return 
+    
+    def _lambdify_sym_dcdts(self,sp_syms):
+        """
+        Convert the symbolic dCdt vector (with numerical rate constants) into a numerical function.
+        This overwrites the native self._dcdt function. It's just as fast typically, if not a little faster.
+        Not currently utilized, but this might be useful someday.
+        """
+        species_vec = Matrix([sp_syms[name] for name in self.species])
+        dcdt_func = lambdify(species_vec, self.dcdts_numk, 'numpy')
+        self._dcdt = lambda t, y: dcdt_func(*y).flatten()
+        return
 
     def log_dcdts(self,force_print=False):
         """
-        Log the ordinary differential equations for the concentrations of each species over time.
+        Log the symbolic dCdt's.
         """
         dcdt_dict = {}
         max_header_length = 0
@@ -192,7 +234,7 @@ class NState:
                 dcdt_dict[sp_name].append(f" + {term}")
 
         # Construct the final string
-        ode_log = "ODEs:\n\n"
+        dcdt_log = "dCdt's:\n\n"
         for sp_name, eqn_parts in dcdt_dict.items():
             # Aligning '+' and '-' symbols
             eqn_header = eqn_parts[0]
@@ -200,14 +242,14 @@ class NState:
             aligned_terms = [eqn_header + " " + terms[0]] if terms else [eqn_header]
             aligned_terms += [f"{'':>{max_header_length + 3}}{term}" for term in terms[1:]]
             formatted_eqn = "\n".join(aligned_terms)
-            ode_log += formatted_eqn + '\n\n'
+            dcdt_log += formatted_eqn + '\n\n'
 
-        self.logger.info(ode_log)
+        self.logger.info(dcdt_log)
         if force_print:
-            print(ode_log)
+            print(dcdt_log)
         return
 
-    def _generate_matrices(self):
+    def _generate_matrices_for_rates(self):
         """
         Generates 
             unit species matrix (self._unit_sp_mat), 
@@ -244,7 +286,7 @@ class NState:
 
         return
 
-    def _generate_jac(self):
+    def _generate_jac(self,sp_syms):
         """
         Generate the symbolic Jacobian matrix and convert it to a numerical function.
         Saves the symbolic Jacobian to self.J_sym and the (wrapped) numerical function to self.J_func_wrap(t,y).
@@ -255,41 +297,14 @@ class NState:
         The Jacobian matrix here represents the first-order partial derivatives of the rate of change equations
         for each species with respect to all other species in the system.
         """
-
-        sp_syms = {name: symbols(name) for name in self.species}
-        tr_syms = {name: symbols(name) for name in self.transitions}
-        tr_values = {name: self.transitions[name]['value'] for name in self.transitions}
-        n_species = len(self.species)
-        
-        def make_dcdt_vec(tr_dict):
-            # Rate laws using transition dictionary 
-            rate_laws = {
-                tr_name: tr_dict[tr_name] * prod(sp_syms[sp_name]**coeff for sp_name, coeff in tr['from'])
-                for tr_name, tr in self.transitions.items()
-            }
-            # Construct the ODEs
-            dcdt_vec = Matrix([0] * len(sp_syms))
-            for tr_name, tr in self.transitions.items():
-                for sp_name, coeff in tr['from']:
-                    dcdt_vec[self.species[sp_name]['index']] -= coeff * rate_laws[tr_name]
-                for sp_name, coeff in tr['to']:
-                    dcdt_vec[self.species[sp_name]['index']] += coeff * rate_laws[tr_name]
-            return dcdt_vec
-    
-
-        # Rate laws using symbolic transition names for readability in addition to symbolic species names
-        dcdt_vec_sym = make_dcdt_vec(tr_syms)
-        
-        # Rate laws for actual computation with only symbolic species names
-        dcdt_vec_num = make_dcdt_vec(tr_values)
         
         species_vec = Matrix(list(sp_syms.values()))
 
         # Symbolic Jacobian
-        self.J_sym = dcdt_vec_sym.jacobian(species_vec)
+        self.J_sym = self.dcdts_sym.jacobian(species_vec)
 
         # Numerical Jacobian
-        self.J_symsp_numtr = dcdt_vec_num.jacobian(species_vec) # Symbolic species, numeric transition rate constants
+        self.J_symsp_numtr = self.dcdts_numk.jacobian(species_vec) # Symbolic species, numeric transition rate constants
         J_func = lambdify(species_vec, self.J_symsp_numtr, 'numpy') # Make numerical function. Accepts 
         self.J_func_wrap = lambda t, y: J_func(*y) # Wrap J_func so that t,y is passed to the function to be compatible with solve_ivp
 
@@ -324,7 +339,7 @@ class NState:
         Cannot model rates that are not simple power laws (eg dynamic inhibition, cooperativity, time dependent params). 
         But most of these can be baked in on the schematic level I think. 
         """
-        #TODO: Use higher dimensionality conc arrays to process multiple input concs at once? Hard
+        #TODO: Use higher dimensionality conc arrays to process multiple input concs at once? 
         C_Nr = np.prod(np.power(conc, self._stoich_reactant_mat), axis=1) # state dependencies
         N_K = np.dot(self._k_diag,self._stoich_mat) # interactions
         dCdt = np.dot(C_Nr,N_K)
@@ -342,7 +357,7 @@ class NState:
         t_span (tuple): Time span for ODE solutions.
 
         conc0_dict (dict: {str:np.array}): Dictionary of {species_name: conc0_arr} pairs for initial concentrations to simulate. 
-            Unprovided species will use self.species[name]['conc'][0] as a single-point initial concentration.
+            Unprovided species will use self.species[NAME]['conc'][0] as a single-point initial concentration.
             Using multiple conc0's will nest the concentrations in an array and raw solutions in a list.
                 The conc0 combinations are saved to self.conc0_mat. 
                 If not using conc0_dict, self.conc0_mat will still be set to the single conc0 vector. 
@@ -360,7 +375,7 @@ class NState:
         dense_output (bool): If True, save a scipy.integrate.OdeSolution instance to self.soln_continuous(t)
             If using multiple conc0's, this will be a list of functions that share indexing with the other outputs,
                 and can be called like "self.soln_continuous[idx](t)".
-            Access a specific species conc like soln_continuous(t)[self.species[name]['index']].
+            Access a specific species conc like soln_continuous(t)[self.species[NAME]['index']].
 
         """
         #TODO: check how combinations are arranged and make sure its intuitive to separate and use them (ie the indexing is clear)
@@ -380,8 +395,7 @@ class NState:
         else:
             conc0_mat = np.atleast_2d([np.atleast_1d(sp_data['conc']).flatten()[0] for _, sp_data in self.species.items()])
         conc0_mat_len = len(conc0_mat)
-        if conc0_mat_len != 1:
-            self.logger.info(f"Simulating {conc0_mat_len} initial concentration vectors...")
+        self.logger.info(f"Solving the timecourse from {conc0_mat_len} initial concentration vectors...")
         self.conc0_mat = conc0_mat
 
         solns = []
@@ -397,7 +411,7 @@ class NState:
                     naive_time_scale = 1 / (np.abs(filtered_eigenvalues).min())
                     naive_time_scale = naive_time_scale * 6.5
                     t_span = (0, naive_time_scale) # Start at 0 or np.abs(filtered_eigenvalues).min()?
-                    #print(f"Estimated time scale: {naive_time_scale:.2e}")
+                    self.logger.info(f"\tEstimated time scale: {naive_time_scale:.2e} (1/<rate constant units>)")
                     
                 else:
                     t_span = (t_eval[0], t_eval[-1])
@@ -544,7 +558,7 @@ class NState:
 
     def conc_mat2dict(self,conc_mat):
         """
-        Save species vectors from a concentration matrix to the respective species[name]['conc'] based on species[name]['index'].
+        Save species vectors from a concentration matrix to the respective species[NAME]['conc'] based on species[NAME]['index'].
         Useful for saving the output of a continuous solution to the species dictionary.
             Don't forget `system.t_dcdts = t`
         """

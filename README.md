@@ -33,8 +33,8 @@ scheme = {
         "EI": {"conc": 0, "label": "$EI$"},
     },    
     'transitions': {
-        "kon": {"value": 0.01, "from": ["E","I"], "to": ["EI"]},
-        "koff": {"value": 0.1, "from": ["EI"], "to": ["E","I"]},
+        "kon": {"value": 0.01, "source": ["E","I"], "to": ["EI"]},
+        "koff": {"value": 0.1, "source": ["EI"], "to": ["E","I"]},
     }
 }
 

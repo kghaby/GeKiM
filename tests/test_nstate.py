@@ -28,10 +28,10 @@ schemes["3S_vani"] = {
         "EI": {"conc": 0, "label": r"E-I"},
     },
     "transitions": {
-        "k1": {"value": kon, "from": ["E", "I"], "to": ["E_I"], "label": r"$k_{on}$"},
-        "k2": {"value": koff, "from": ["E_I"], "to": ["E", "I"], "label": r"$k_{off}$"},
-        "k3": {"value": kinactf, "from": ["E_I"], "to": ["EI"]}, #irrev step
-        "k4": {"value": kinactb, "from": ["EI"], "to": ["E_I"]},
+        "k1": {"value": kon, "source": ["E", "I"], "target": ["E_I"], "label": r"$k_{on}$"},
+        "k2": {"value": koff, "source": ["E_I"], "target": ["E", "I"], "label": r"$k_{off}$"},
+        "k3": {"value": kinactf, "source": ["E_I"], "target": ["EI"]}, #irrev step
+        "k4": {"value": kinactb, "source": ["EI"], "target": ["E_I"]},
     },
 }
 schemes["3S_mod1.1"] = {
@@ -42,10 +42,10 @@ schemes["3S_mod1.1"] = {
         "EI": {"conc": 0, "label": r"E-I"},
     },
     "transitions": {
-        "k1": {"value": kon, "from": ["E", "2.0I"], "to": ["E_I"], "label": r"$k_{on}$"},
-        "k2": {"value": koff, "from": ["E_I"], "to": ["E", "2.0I"], "label": r"$k_{off}$"},
-        "k3": {"value": kinactf, "from": ["3E_I"], "to": ["7EI"]}, #irrev step
-        "k4": {"value": kinactb, "from": ["7EI"], "to": ["3E_I"]},
+        "k1": {"value": kon, "source": ["E", "2.0I"], "target": ["E_I"], "label": r"$k_{on}$"},
+        "k2": {"value": koff, "source": ["E_I"], "target": ["E", "2.0I"], "label": r"$k_{off}$"},
+        "k3": {"value": kinactf, "source": ["3E_I"], "target": ["7EI"]}, #irrev step
+        "k4": {"value": kinactb, "source": ["7EI"], "target": ["3E_I"]},
     },
 }
 schemes["3S_mod1.2"] = {
@@ -56,10 +56,10 @@ schemes["3S_mod1.2"] = {
         "EI": {"conc": 0, "label": r"E-I"},
     },
     "transitions": {
-        "k1": {"value": kon, "from": ["E", "I", "I"], "to": ["E_I"], "label": r"$k_{on}$"},
-        "k2": {"value": koff, "from": ["E_I"], "to": ["E", "I", "I"], "label": r"$k_{off}$"},
-        "k3": {"value": kinactf, "from": ["E_I","E_I","E_I"], "to": ["7EI"]}, #irrev step
-        "k4": {"value": kinactb, "from": ["7EI"], "to": ["E_I","E_I","E_I"]},
+        "k1": {"value": kon, "source": ["E", "I", "I"], "target": ["E_I"], "label": r"$k_{on}$"},
+        "k2": {"value": koff, "source": ["E_I"], "target": ["E", "I", "I"], "label": r"$k_{off}$"},
+        "k3": {"value": kinactf, "source": ["E_I","E_I","E_I"], "target": ["7EI"]}, #irrev step
+        "k4": {"value": kinactb, "source": ["7EI"], "target": ["E_I","E_I","E_I"]},
     },
 }
 schemes["3S_mod2.1"] = {
@@ -70,10 +70,10 @@ schemes["3S_mod2.1"] = {
         "EI": {"conc": 0, "label": r"E-I"},
     },
     "transitions": {
-        "k1": {"value": kon, "from": ["2E", "I"], "to": ["E_I","E"], "label": r"$k_{on}$"},
-        "k2": {"value": koff, "from": ["E_I","E"], "to": ["2E", "I"], "label": r"$k_{off}$"},
-        "k3": {"value": kinactf, "from": ["E_I"], "to": ["EI"]}, #irrev step
-        "k4": {"value": kinactb, "from": ["EI"], "to": ["E_I"]},
+        "k1": {"value": kon, "source": ["2E", "I"], "target": ["E_I","E"], "label": r"$k_{on}$"},
+        "k2": {"value": koff, "source": ["E_I","E"], "target": ["2E", "I"], "label": r"$k_{off}$"},
+        "k3": {"value": kinactf, "source": ["E_I"], "target": ["EI"]}, #irrev step
+        "k4": {"value": kinactb, "source": ["EI"], "target": ["E_I"]},
     },
 }
 
@@ -88,12 +88,12 @@ def _dcdt_old(system, t, concentrations):
     dcdt_arr = np.zeros_like(concentrations)
     for tr in system.transitions.values():
         rate_constant = tr['value']
-        rate = rate_constant * np.prod([concentrations[system.species[sp_name]['index']] ** coeff for sp_name,coeff in tr['from']])
+        rate = rate_constant * np.prod([concentrations[system.species[sp_name]['index']] ** coeff for sp_name,coeff in tr["source"]])
         # Iterating through like this is beneficial because it captures stoichiometry that is evident in the list rather than coefficient 
-            # (eg "from": ["E","E", "I"] is equal to "from": ["2E", "I"])
-        for sp_name,coeff in tr['from']:
+            # (eg "source": ["E","E", "I"] is equal to "source": ["2E", "I"])
+        for sp_name,coeff in tr["source"]:
             dcdt_arr[system.species[sp_name]['index']] -= coeff * rate
-        for sp_name,coeff in tr['to']:
+        for sp_name,coeff in tr["target"]:
             dcdt_arr[system.species[sp_name]['index']] += coeff * rate
     return dcdt_arr
 

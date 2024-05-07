@@ -7,11 +7,34 @@ from scipy.integrate import solve_ivp
 from itertools import product
 from sympy import symbols, Matrix, prod, pretty, zeros, lambdify
 from ..utils import integerable_float
-        
+
+#TODO: find_linear_paths in kinetics2 and more general pathfinder in utils?
+    
+class Species:
+    def __init__(self, name, conc, label=None):
+        self.name = name
+        self.conc = np.array([conc]) if np.isscalar(conc) else np.array(conc)
+        self.label = label or name
+
+    def __repr__(self):
+        return f"{self.name} (Concentration: {self.conc}, Label: {self.label})"
+
+class Transition:
+    def __init__(self, name, rate_constant, source, target, label=None):
+        self.name = name
+        self.rate_constant = rate_constant
+        self.source = source  # List of (Species, coefficient) tuples
+        self.target = target  # List of (Species, coefficient) tuples
+        self.label = label or name
+
+    def __repr__(self):
+        source_str = ' + '.join([f"{coeff}*{sp.name}" for sp, coeff in self.source])
+        target_str = ' + '.join([f"{coeff}*{sp.name}" for sp, coeff in self.target])
+        return f"{self.name} ({self.rate_constant}): {source_str} -> {target_str}"
+
+    
 class NState:
     #TODO: Add stochastic method
-    #TODO: use sympy for odes so that massive scheme odes are easily dictionaried and utilized
-
     
     def __init__(self, config, logfilename=None, quiet=False):
         """
@@ -20,11 +43,22 @@ class NState:
         Parameters:
         config (dict): Configuration containing species and transitions.
                        Species should contain name, initial concentration, and label.
-                       Transitions should contain name, from-species, to-species, value, and label.
+                       Transitions should contain name, source-species, target-species, value, and label.
 
         Raises:
         ValueError: If config is invalid.
         """
+        self._setup_logger(logfilename,quiet)
+
+        self._validate_config(config)
+        self.config = copy.deepcopy(config)
+    
+        self.species = self.config['species']
+        self.transitions = self.config['transitions']
+        self.setup_data()
+        self.logger.info(f"NState system initialized successfully.\n")
+    
+    def _setup_logger(self,logfilename=None,quiet=False):
         self.logger = logging.getLogger(__name__)
         self.logger.handlers = []
         if quiet:
@@ -40,16 +74,9 @@ class NState:
         stream_handler = logging.StreamHandler(sys.stdout)
         #stream_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
         self.logger.addHandler(stream_handler)
+        return
 
-        self._validate_config(config)
-        self.config = copy.deepcopy(config)
-    
-        self.species = self.config['species']
-        self.transitions = self.config['transitions']
-        self.setup()
-        self.logger.info(f"NState system initialized successfully.\n")
-    
-    def setup(self):
+    def setup_data(self):
         """
         Use this if you added transitions or species after initialization.
         This is called in __init__ so you don't need to call it again unless you change the scheme.
@@ -144,7 +171,7 @@ class NState:
         Is idempotent.
         """
         for _, tr in self.transitions.items():
-            for direction in ['from', 'to']:
+            for direction in ["source", "target"]:
                 parsed_species = {}
                 for sp in tr[direction]:
                     if isinstance(sp, str):
@@ -175,10 +202,10 @@ class NState:
         # Generate dCdt's with symbolic species and rate constants 
         dcdts_sym = Matrix([0] * len(sp_syms))
         for tr_name, tr in self.transitions.items():
-            unscaled_rate = tr_syms[tr_name] * prod(sp_syms[sp_name]**coeff for sp_name, coeff in tr['from'])
-            for sp_name, coeff in tr['from']:
+            unscaled_rate = tr_syms[tr_name] * prod(sp_syms[sp_name]**coeff for sp_name, coeff in tr["source"])
+            for sp_name, coeff in tr["source"]:
                 dcdts_sym[self.species[sp_name]['index']] -= coeff * unscaled_rate
-            for sp_name, coeff in tr['to']:
+            for sp_name, coeff in tr["target"]:
                 dcdts_sym[self.species[sp_name]['index']] += coeff * unscaled_rate
         self.dcdts_sym = dcdts_sym 
 
@@ -221,15 +248,15 @@ class NState:
 
         for tr_name, tr in self.transitions.items():
             # Write rate law
-            rate = f"{tr_name} * " + " * ".join([f"{sp_name}^{coeff}" if coeff != 1 else f"{sp_name}" for sp_name,coeff in tr['from']])
+            rate = f"{tr_name} * " + " * ".join([f"{sp_name}^{coeff}" if coeff != 1 else f"{sp_name}" for sp_name,coeff in tr["source"]])
             rate = rate.rstrip(" *")  # Remove trailing " *"
 
             # Add rate law to the eqns
-            for sp_name,coeff in tr['from']:
+            for sp_name,coeff in tr["source"]:
                 term = f"{coeff} * {rate}" if coeff > 1 else rate
                 dcdt_dict[sp_name].append(f" - {term}")
 
-            for sp_name,coeff in tr['to']:
+            for sp_name,coeff in tr["target"]:
                 term = f"{coeff} * {rate}" if coeff > 1 else rate
                 dcdt_dict[sp_name].append(f" + {term}")
 
@@ -275,8 +302,8 @@ class NState:
         for tr_name, tr in self.transitions.items():
             tr_idx = tr['index']
             self._k_vec[tr_idx] = tr['value']
-            reactant_vec = np.sum([self._unit_sp_mat[self.species[name]['index']] * coeff for name, coeff in tr['from']],axis=0)
-            product_vec = np.sum([self._unit_sp_mat[self.species[name]['index']] * coeff for name, coeff in tr['to']],axis=0)
+            reactant_vec = np.sum([self._unit_sp_mat[self.species[name]['index']] * coeff for name, coeff in tr["source"]],axis=0)
+            product_vec = np.sum([self._unit_sp_mat[self.species[name]['index']] * coeff for name, coeff in tr["target"]],axis=0)
             
             self._stoich_reactant_mat[tr_idx, :] = reactant_vec  
             #self._stoich_product_mat[tr_idx, :] = product_vec   # not used
@@ -484,7 +511,7 @@ class NState:
         while current_time < t[-1]:
             rate = np.zeros(len(transitions_list))
             for tr_idx, tr in enumerate(transitions_list):
-                tr_rate = tr['value'] * np.prod([conc[self.species[sp_name]['index']] ** coeff for sp_name,coeff in tr['from']])
+                tr_rate = tr['value'] * np.prod([conc[self.species[sp_name]['index']] ** coeff for sp_name,coeff in tr["source"]])
                 rate[tr_idx] = tr_rate
 
             total_rate = np.sum(rate)
@@ -502,9 +529,9 @@ class NState:
             event = np.searchsorted(cumulative_rate, np.random.rand() * total_rate)
 
             # Update concentrations
-            for coeff, sp_name in transitions_list[event]['from']:
+            for coeff, sp_name in transitions_list[event]["source"]:
                 conc[self.species[sp_name]['index']] -= coeff
-            for coeff, sp_name in transitions_list[event]['to']:
+            for coeff, sp_name in transitions_list[event]["target"]:
                 conc[self.species[sp_name]['index']] += coeff
 
             times.append(current_time)

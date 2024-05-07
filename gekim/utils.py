@@ -46,20 +46,23 @@ def round_sig(num, sig_figs, autoformat=True):
         return result
 
 class Plotting:
-    def assign_colors_to_species(schemes, saturation_range=(0.5, 0.7), lightness_range=(0.3, 0.4), method=None, offset=0, overwrite_existing=False, seed=None):
+    def assign_colors_to_species(schemes: dict, saturation_range: tuple = (0.5, 0.7), lightness_range: tuple = (0.3, 0.4), 
+                                method: str = None, offset: float = 0, overwrite_existing=False, seed: int = None):
         """
         Assigns a distinct and aesthetically pleasing color to each species in a dictionary or a single kinetic scheme.
         Uses either a fixed or golden ratio based distribution for hues. Optionally seeds the randomness for consistent results.
-        Parameters:
-            schemes (dict): Dictionary of kinetic scheme dictionaries or a single kinetic scheme dictionary.
-            saturation_range (tuple): Min and max saturation values.
-            lightness_range (tuple): Min and max lightness values.
-            method (str): "GR" for golden ratio hue distribution; None for linear distribution.
-            offset (float): Offset value for the hues.
-            overwrite_existing (bool): If True, overwrite existing colors; if False, assign colors only to species without colors.
-            seed (int): Seed for random number generator for reproducible color variations.
+
+        Args:
+        schemes (dict): Dictionary of kinetic scheme dictionaries or a single kinetic scheme dictionary.
+        saturation_range (tuple): Min and max saturation values.
+        lightness_range (tuple): Min and max lightness values.
+        method (str): "GR" for golden ratio hue distribution; None for linear distribution.
+        offset (float): Offset value for the hues.
+        overwrite_existing (bool): If True, overwrite existing colors; if False, assign colors only to species without colors.
+        seed (int): Seed for random number generator for reproducible color variations.
+
         Returns:
-            dict: Updated schemes with assigned colors. Edits original input dict.
+        dict: Updated schemes with assigned colors. Edits original input dict.
         """
         #TODO: handle list of schemes and NState class
         if not isinstance(schemes, dict):
@@ -128,11 +131,11 @@ def _update_dict_with_subset(defaults: dict, updates: dict):
     ensuring that only the keys present in the defaults are updated.
 
     Args:
-        defaults: The default dictionary containing all allowed keys with their default values.
-        updates: The update dictionary containing keys to update in the defaults dictionary.
+    defaults: The default dictionary containing all allowed keys with their default values.
+    updates: The update dictionary containing keys to update in the defaults dictionary.
 
     Returns:
-        dict: The updated dictionary.
+    dict: The updated dictionary.
     """
 
     for key, update_value in updates.items():

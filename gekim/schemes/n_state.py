@@ -11,7 +11,7 @@ from ..utils import integerable_float
 #TODO: find_linear_paths in kinetics2 and more general pathfinder in utils?
     
 class Species:
-    def __init__(self, name, conc, label=None):
+    def __init__(self, name: str, conc: , label=None):
         self.name = name
         self.conc = np.array([conc]) if np.isscalar(conc) else np.array(conc)
         self.label = label or name
@@ -32,15 +32,14 @@ class Transition:
         target_str = ' + '.join([f"{coeff}*{sp.name}" for sp, coeff in self.target])
         return f"{self.name} ({self.rate_constant}): {source_str} -> {target_str}"
 
-    
 class NState:
     #TODO: Add stochastic method
     
-    def __init__(self, config, logfilename=None, quiet=False):
+    def __init__(self, config: dict, logfilename=None, quiet=False):
         """
         Initialize the NState class with configuration data.
 
-        Parameters:
+        Args:
         config (dict): Configuration containing species and transitions.
                        Species should contain name, initial concentration, and label.
                        Transitions should contain name, source-species, target-species, value, and label.
@@ -150,7 +149,7 @@ class NState:
         """
         Extract coefficient and species name from species string.
 
-        Parameters:
+        Args:
         species_str (str): A species string, e.g., '2A'.
 
         Returns:
@@ -372,7 +371,7 @@ class NState:
         dCdt = np.dot(C_Nr,N_K)
         return dCdt
 
-    def solve_dcdts(self, t_eval=None, t_span=None, conc0_dict=None, method='BDF', rtol=1e-6, atol=1e-8, 
+    def solve_dcdts(self, t_eval: np.ndarray = None, t_span: tuple = None, conc0_dict: dict = None, method='BDF', rtol=1e-6, atol=1e-8, 
                     output_raw=False, dense_output=False):
         """
         Solve the ODEs of species concentration wrt time for the system. 
@@ -383,7 +382,7 @@ class NState:
 
         t_span (tuple): Time span for ODE solutions.
 
-        conc0_dict (dict: {str:np.array}): Dictionary of {species_name: conc0_arr} pairs for initial concentrations to simulate. 
+        conc0_dict (dict: {str: np.ndarray}): Dictionary of {species_name: conc0_arr} pairs for initial concentrations to simulate. 
             Unprovided species will use self.species[NAME]['conc'][0] as a single-point initial concentration.
             Using multiple conc0's will nest the concentrations in an array and raw solutions in a list.
                 The conc0 combinations are saved to self.conc0_mat. 
@@ -491,7 +490,7 @@ class NState:
         """
         Simulate the system stochastically using the Gillespie algorithm.
 
-        Parameters:
+        Args:
         t (np.array): Time points for desired observations.
         output_raw (bool): If True, return raw simulation data.
 
@@ -562,7 +561,7 @@ class NState:
         Sum the concentrations of specified species in the model.
         Whitelist and blacklist cannot be provided simultaneously.
 
-        Parameters:
+        Args:
         whitelist (list, optional): Names of species to include in the sum.
         blacklist (list, optional): Names of species to exclude from the sum.
 

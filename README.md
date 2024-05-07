@@ -33,8 +33,8 @@ scheme = {
         "EI": {"conc": 0, "label": "$EI$"},
     },    
     'transitions': {
-        "kon": {"value": 0.01, "source": ["E","I"], "to": ["EI"]},
-        "koff": {"value": 0.1, "source": ["EI"], "to": ["E","I"]},
+        "kon": {"value": 0.01, "source": ["E","I"], "target": ["EI"]},
+        "koff": {"value": 0.1, "source": ["EI"], "target": ["E","I"]},
     }
 }
 
@@ -47,7 +47,7 @@ system.solve_dcdts(t)
 
 # Fit the data to experimental models to extract mock-experimental measurements
 final_state = system.species["EI"]['conc']
-all_bound = system.sum_conc(blacklist=["E","I","Et"])
+all_bound = system.sum_conc(blacklist=["E","I"])
 fit_output = ci.kobs_uplim_fit_to_occ_final_wrt_t(
     t,final_state,nondefault_params={"Etot":{"fix":concE0}})
 print(f"Fit: {fit_output.fitted_params}\n")

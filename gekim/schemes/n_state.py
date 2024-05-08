@@ -110,6 +110,7 @@ class Transition:
 
 class NState:
     #TODO: Add stochastic method
+    #TODO: add_species and add_transition methods
     
     def __init__(self, config: dict, logfilename=None, quiet=False):
         """

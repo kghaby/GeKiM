@@ -1,12 +1,12 @@
 import numpy as np
 import re
 import copy
-import logging
 import sys
 from scipy.integrate import solve_ivp
 from itertools import product
 from sympy import symbols, Matrix, prod, pretty, zeros, lambdify
-from ..utils import integerable_float
+from ..utils import integerable_float,Logger
+
 
 #TODO: find_linear_paths in kinetics2 and more general pathfinder in utils?
     
@@ -20,9 +20,9 @@ class Species:
         return f"{self.name} (Concentration: {self.conc}, Label: {self.label})"
 
 class Transition:
-    def __init__(self, name, rate_constant, source, target, label=None):
+    def __init__(self, name: str, k_value: float, source, target, label=None):
         self.name = name
-        self.rate_constant = rate_constant
+        self.k_value = k_value
         self.source = source  # List of (Species, coefficient) tuples
         self.target = target  # List of (Species, coefficient) tuples
         self.label = label or name
@@ -30,7 +30,7 @@ class Transition:
     def __repr__(self):
         source_str = ' + '.join([f"{coeff}*{sp.name}" for sp, coeff in self.source])
         target_str = ' + '.join([f"{coeff}*{sp.name}" for sp, coeff in self.target])
-        return f"{self.name} ({self.rate_constant}): {source_str} -> {target_str}"
+        return f"{self.name} ({self.k_value}): {source_str} -> {target_str}"
 
 class NState:
     #TODO: Add stochastic method
@@ -47,7 +47,7 @@ class NState:
         Raises:
         ValueError: If config is invalid.
         """
-        self._setup_logger(logfilename,quiet)
+        self.log = Logger(quiet=quiet, logfilename=logfilename)
 
         self._validate_config(config)
         self.config = copy.deepcopy(config)
@@ -55,25 +55,7 @@ class NState:
         self.species = self.config['species']
         self.transitions = self.config['transitions']
         self.setup_data()
-        self.logger.info(f"NState system initialized successfully.\n")
-    
-    def _setup_logger(self,logfilename=None,quiet=False):
-        self.logger = logging.getLogger(__name__)
-        self.logger.handlers = []
-        if quiet:
-            self.logger.setLevel(logging.WARNING)
-        else:
-            self.logger.setLevel(logging.INFO)
-
-        if logfilename:
-            file_handler = logging.FileHandler(logfilename)
-            #file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
-            self.logger.addHandler(file_handler)
-
-        stream_handler = logging.StreamHandler(sys.stdout)
-        #stream_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
-        self.logger.addHandler(stream_handler)
-        return
+        self.log.info(f"NState system initialized successfully.\n")
 
     def setup_data(self):
         """
@@ -129,10 +111,10 @@ class NState:
             # Validate labels
             label = data.get('label',name)
             if 'label' not in data.keys():
-                self.logger.info(f"Label not found for species '{name}'. Using species name as label.")
+                self.log.info(f"Label not found for species '{name}'. Using species name as label.")
                 self.species[name]['label'] = name
             if label in labels:
-                self.logger.error(f"Duplicate label '{label}' found for species '{name}'.")
+                self.log.error(f"Duplicate label '{label}' found for species '{name}'.")
                 return False
             labels.add(label)
         
@@ -211,7 +193,7 @@ class NState:
         # Assign each dcdt to the respective species
         for sp_name, sp_data in self.species.items():
             sp_data['dcdt'] = dcdts_sym[sp_data['index']]
-        self.logger.info("Assigned symbolic dCdt's to species (self.species[NAME]['dcdt']).\n")
+        self.log.info("Assigned symbolic dCdt's to species (self.species[NAME]['dcdt']).\n")
 
         # Substitute rate constant symbols for values 
         tr_sym2num = {symbols(name): tr['value'] for name, tr in self.transitions.items()}
@@ -270,7 +252,7 @@ class NState:
             formatted_eqn = "\n".join(aligned_terms)
             dcdt_log += formatted_eqn + '\n\n'
 
-        self.logger.info(dcdt_log)
+        self.log.info(dcdt_log)
         if force_print:
             print(dcdt_log)
         return
@@ -356,7 +338,7 @@ class NState:
         J_log_str = "Jacobian (including row and column labels):\n"
         J_log_str += pretty((J_log),use_unicode=True)
         J_log_str += "\n"
-        self.logger.info(J_log_str)
+        self.log.info(J_log_str)
         
         return
 
@@ -421,7 +403,7 @@ class NState:
         else:
             conc0_mat = np.atleast_2d([np.atleast_1d(sp_data['conc']).flatten()[0] for _, sp_data in self.species.items()])
         conc0_mat_len = len(conc0_mat)
-        self.logger.info(f"Solving the timecourse from {conc0_mat_len} initial concentration vectors...")
+        self.log.info(f"Solving the timecourse from {conc0_mat_len} initial concentration vectors...")
         self.conc0_mat = conc0_mat
 
         solns = []
@@ -437,7 +419,7 @@ class NState:
                     naive_time_scale = 1 / (np.abs(filtered_eigenvalues).min())
                     naive_time_scale = naive_time_scale * 6.5
                     t_span = (0, naive_time_scale) # Start at 0 or np.abs(filtered_eigenvalues).min()?
-                    self.logger.info(f"\tEstimated time scale: {naive_time_scale:.2e} (1/<rate constant units>)")
+                    self.log.info(f"\tEstimated time scale: {naive_time_scale:.2e} (1/<rate constant units>)")
                     
                 else:
                     t_span = (t_eval[0], t_eval[-1])
@@ -449,41 +431,41 @@ class NState:
                 raise RuntimeError("FAILED: " + soln.message)
             solns.append(soln)
             
-        self.logger.info("ODEs solved successfully. Saving data...")
+        self.log.info("ODEs solved successfully. Saving data...")
 
         if conc0_mat_len == 1:
             self.t_dcdts = soln.t
-            self.logger.info(f"\tTime saved to self.t_dcdts (np.array)")
+            self.log.info(f"\tTime saved to self.t_dcdts (np.array)")
             for _, data in self.species.items():
                 data['conc'] = soln.y[data['index']]
-            self.logger.info(f"\tConcentrations saved respectively to self.species[sp_name]['conc'] (np.array)")
+            self.log.info(f"\tConcentrations saved respectively to self.species[sp_name]['conc'] (np.array)")
             if dense_output:
                 self.soln_continuous = soln.sol
-                self.logger.info(f"\tSaving continuous solution function to self.soln_continuous(t) (scipy.integrate.OdeSolution)")
+                self.log.info(f"\tSaving continuous solution function to self.soln_continuous(t) (scipy.integrate.OdeSolution)")
             else:
                 self.soln_continuous = None
-                self.logger.info("\tNot saving continuous solution. Use dense_output=True to save it to self.soln_continuous")
+                self.log.info("\tNot saving continuous solution. Use dense_output=True to save it to self.soln_continuous")
         else:
             self.t_dcdts = [soln.t for soln in solns] 
-            self.logger.info(f"\t{conc0_mat_len} time vectors saved to self.t_dcdts (list of np.arrays)")
+            self.log.info(f"\t{conc0_mat_len} time vectors saved to self.t_dcdts (list of np.arrays)")
             for _, data in self.species.items():
                 data['conc'] = [soln.y[data['index']] for soln in solns]
-            self.logger.info(f"\t{conc0_mat_len} concentration vectors saved respectively to self.species[sp_name]['conc'] (list of np.arrays)")
+            self.log.info(f"\t{conc0_mat_len} concentration vectors saved respectively to self.species[sp_name]['conc'] (list of np.arrays)")
             if dense_output:
                 self.soln_continuous = [soln.sol for soln in solns] 
-                self.logger.info(f"\tSaving list of continuous solution functions to self.soln_continuous (list of scipy.integrate.OdeSolution's)")
+                self.log.info(f"\tSaving list of continuous solution functions to self.soln_continuous (list of scipy.integrate.OdeSolution's)")
             else:
                 self.soln_continuous = None
-                self.logger.info("\tNot saving continuous solutions. Use dense_output=True to save them to self.soln_continuous")
+                self.log.info("\tNot saving continuous solutions. Use dense_output=True to save them to self.soln_continuous")
         
         if output_raw:
             if conc0_mat_len == 1:
-                self.logger.info("Returning raw solver output.\n")
+                self.log.info("Returning raw solver output.\n")
                 return solns[0]
-            self.logger.info("Returning list of raw solver outputs.\n")        
+            self.log.info("Returning list of raw solver outputs.\n")        
             return solns
         else:
-            self.logger.info("Not returning raw solver output. Use output_raw=True to return raw data.\n")
+            self.log.info("Not returning raw solver output. Use output_raw=True to return raw data.\n")
             return
         
     def simulate(self, t, output_raw=False):
@@ -545,7 +527,7 @@ class NState:
             interpolated_concs[:, i] = concentrations[j]
 
         # Logging
-        self.logger.info("Stochastic simulation completed successfully.")
+        self.log.info("Stochastic simulation completed successfully.")
 
         if output_raw:
             return {'time': np.array(times), 'concentrations': np.array(concentrations)}
@@ -591,6 +573,7 @@ class NState:
         for _, sp_data in self.species.items():
             sp_data['conc'] = conc_mat[sp_data['index']]
         return
+
 
 
 

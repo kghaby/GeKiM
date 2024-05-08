@@ -48,16 +48,16 @@ class Transition:
         """
         self.name = name # should be the name of the rate constant for all intents and purposes, eg "kon"
         self.k = k
-        self.source = Transition._format_transition(source)  # List of (SPECIES, COEFF) tuples or "{COEFF}{SPECIES}" strings
-        self.target = Transition._format_transition(target)  # List of (SPECIES, COEFF) tuples or "{COEFF}{SPECIES}" strings
+        self.source = Transition._format_transition(source,"source")  # List of (SPECIES, COEFF) tuples or "{COEFF}{SPECIES}" strings
+        self.target = Transition._format_transition(target,"target")  # List of (SPECIES, COEFF) tuples or "{COEFF}{SPECIES}" strings
         self.label = label or name
         self.index = index
         
 
     def __repr__(self):
-        source_str = ' + '.join([f"{coeff}*{sp.name}" for sp, coeff in self.source])
-        target_str = ' + '.join([f"{coeff}*{sp.name}" for sp, coeff in self.target])
-        return f"{self.name} ({self.k_value}): {source_str} -> {target_str}"
+        source_str = ' + '.join([f"{coeff}*{sp}" for sp, coeff in self.source])
+        target_str = ' + '.join([f"{coeff}*{sp}" for sp, coeff in self.target])
+        return f"{self.name} ({self.k}): {source_str} -> {target_str}"
 
     @staticmethod
     def _parse_species_string(species_str):
@@ -70,17 +70,19 @@ class Transition:
         Returns:
         tuple: A tuple of species name (str) and stoichiometric coefficient (int).
         """
-        match = re.match(r"(\d*\.?\d*)(\D.*)", species_str)
+        match = re.match(r"(-?\d*\.?\d*)(\D.*)", species_str)
         if match and match.groups()[0]:
-            coeff = float(match.groups()[0])
-            coeff = integerable_float(coeff)
+            coeff = match.groups()[0]
+            if coeff == '-':
+                coeff = -1
+            coeff = integerable_float(float(coeff))
         else:
             coeff = 1
         name = match.groups()[1] if match else species_str
         return name,coeff
     
     @staticmethod            
-    def _format_transition(tr):
+    def _format_transition(tr,direction=None):
         """
         Format a transition by extracting and combining coefficients and species names.
         Is idempotent.
@@ -101,6 +103,8 @@ class Transition:
                     raise ValueError(f"Invalid species tuple '{sp}' in transition '{tr}'.")
             else:
                 raise ValueError(f"Invalid species '{sp}' in transition '{tr}'.")
+            if direction == "source" and coeff < 0:
+                raise ValueError(f"Negative coefficient '{coeff}' in source of transition '{tr}'.")
             if name in parsed_species:
                 parsed_species[name] += coeff # combine coeffs
             else:
@@ -267,11 +271,11 @@ class NState:
 
             # Add rate law to the eqns
             for sp_name,coeff in tr.source:
-                term = f"{coeff} * {rate}" if coeff > 1 else rate
+                term = f"{coeff} * {rate}" if coeff != 1 else rate
                 dcdt_dict[sp_name].append(f" - {term}")
 
             for sp_name,coeff in tr.target:
-                term = f"{coeff} * {rate}" if coeff > 1 else rate
+                term = f"{coeff} * {rate}" if coeff != 1 else rate
                 dcdt_dict[sp_name].append(f" + {term}")
 
         # Construct the final string

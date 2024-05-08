@@ -166,7 +166,7 @@ def compare_dictionaries(dict1, dict2, rel_tol=1e-9, abs_tol=0.0):
     return True
 
 class Logger:
-    def __init__(self, quiet=True, logfilename=None):
+    def __init__(self, quiet=False, logfilename=None):
         self.quiet = quiet
         self.logfilename = logfilename
         self.file_handle = None

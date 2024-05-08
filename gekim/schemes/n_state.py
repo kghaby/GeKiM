@@ -11,26 +11,102 @@ from ..utils import integerable_float,Logger
 #TODO: find_linear_paths in kinetics2 and more general pathfinder in utils?
     
 class Species:
-    def __init__(self, name: str, conc: np.ndarray|float, label=None):
+    def __init__(self, name: str, conc: np.ndarray|float, label=None, color=None, index=None, dcdt=None):
+        """
+        Recommended to initialize with the following arguments:
+        name (str): Name of the species.
+        conc (np.ndarray|float): Initial concentration of the species.
+        label (str): Useful for plotting. Will default to NAME.
+        color (str): useful for plotting. Best added by ..utils.Plotting.assign_colors_to_species().
+
+        Args that should be left alone unless you know what you're doing:
+        index (int): Index of the species in the system. Added by the NState class.
+        dcdt (float): Symbolic rate law for the species. Added by the NState class.
+        """
         self.name = name
         self.conc = np.array([conc]) if np.isscalar(conc) else np.array(conc)
         self.label = label or name
+        self.index = index
+        self.color = color
+        self.dcdt = dcdt
 
     def __repr__(self):
         return f"{self.name} (Concentration: {self.conc}, Label: {self.label})"
 
 class Transition:
-    def __init__(self, name: str, k_value: float, source, target, label=None):
-        self.name = name
-        self.k_value = k_value
-        self.source = source  # List of (Species, coefficient) tuples
-        self.target = target  # List of (Species, coefficient) tuples
+    def __init__(self, name: str, k: float, source: list, target: list, label=None, index=None):
+        """
+        Recommended to initialize with the following arguments:
+        name (str): Name of the rate constant.
+        k (float): Value of the rate constant.
+        source (list): List of (SPECIES, COEFF) tuples or "{COEFF}{SPECIES}" strings
+        target (list): List of (SPECIES, COEFF) tuples or "{COEFF}{SPECIES}" strings
+        label (str): Could be useful for plotting. Will default to NAME.
+    
+        Args that should be left alone unless you know what you're doing:
+        index (int): Index of the transition in the system. Added by the NState class.
+        """
+        self.name = name # should be the name of the rate constant for all intents and purposes, eg "kon"
+        self.k = k
+        self.source = Transition._format_transition(source)  # List of (SPECIES, COEFF) tuples or "{COEFF}{SPECIES}" strings
+        self.target = Transition._format_transition(target)  # List of (SPECIES, COEFF) tuples or "{COEFF}{SPECIES}" strings
         self.label = label or name
+        self.index = index
+        
 
     def __repr__(self):
         source_str = ' + '.join([f"{coeff}*{sp.name}" for sp, coeff in self.source])
         target_str = ' + '.join([f"{coeff}*{sp.name}" for sp, coeff in self.target])
         return f"{self.name} ({self.k_value}): {source_str} -> {target_str}"
+
+    @staticmethod
+    def _parse_species_string(species_str):
+        """
+        Extract coefficient and species name from species string.
+
+        Args:
+        species_str (str): A species string, e.g., '2A'.
+
+        Returns:
+        tuple: A tuple of species name (str) and stoichiometric coefficient (int).
+        """
+        match = re.match(r"(\d*\.?\d*)(\D.*)", species_str)
+        if match and match.groups()[0]:
+            coeff = float(match.groups()[0])
+            coeff = integerable_float(coeff)
+        else:
+            coeff = 1
+        name = match.groups()[1] if match else species_str
+        return name,coeff
+    
+    @staticmethod            
+    def _format_transition(tr):
+        """
+        Format a transition by extracting and combining coefficients and species names.
+        Is idempotent.
+        """
+        parsed_species = {}
+        for sp in tr:
+            if isinstance(sp, str):
+                name, coeff = Transition._parse_species_string(sp)
+            elif isinstance(sp, tuple):
+                if len(sp) == 2:
+                    if isinstance(sp[0], str) and isinstance(sp[1], (int, float)):
+                        name, coeff = sp
+                    elif isinstance(sp[1], str) and isinstance(sp[2], (int, float)):
+                        coeff, name = sp
+                    else:
+                        raise ValueError(f"Invalid species tuple '{sp}' in transition '{tr}'.")
+                else:
+                    raise ValueError(f"Invalid species tuple '{sp}' in transition '{tr}'.")
+            else:
+                raise ValueError(f"Invalid species '{sp}' in transition '{tr}'.")
+            if name in parsed_species:
+                parsed_species[name] += coeff # combine coeffs
+            else:
+                parsed_species[name] = coeff
+        tr = [(name, coeff) for name, coeff in parsed_species.items()]
+        return tr
 
 class NState:
     #TODO: Add stochastic method
@@ -52,8 +128,25 @@ class NState:
         self._validate_config(config)
         self.config = copy.deepcopy(config)
     
-        self.species = self.config['species']
-        self.transitions = self.config['transitions']
+        self.species = {
+            name: Species(
+                name=name,
+                conc=np.array([data["conc"]]) if np.isscalar(data["conc"]) else np.array(data["conc"]),
+                label=data.get('label', name),
+                color=data.get('color')
+            ) for name, data in config['species'].items()
+        }
+
+        self.transitions = {
+            name: Transition(
+                name=name,
+                k=data['k'],
+                source=data['source'],
+                target=data['target'],
+                label=data.get('label', name)
+            ) for name, data in config['transitions'].items()
+        }
+
         self.setup_data()
         self.log.info(f"NState system initialized successfully.\n")
 
@@ -66,14 +159,13 @@ class NState:
         #TODO: this needs testing. Make sure that its fine to not reinit the concentrations
         # Document the order of the species
         for idx, name in enumerate(self.species):
-            self.species[name]['index'] = idx
+            self.species[name].index = idx
         self._validate_species()
             
         # Document the order of the transitions
         for idx, name in enumerate(self.transitions):
-            self.transitions[name]['index'] = idx
+            self.transitions[name].index = idx
         
-        self._format_transitions()
         self._generate_matrices_for_rates() # generates self._unit_sp_mat, self._stoich_mat, self._stoich_reactant_mat, self._k_vec, self._k_diag
 
         sp_syms = {name: symbols(name) for name in self.species}
@@ -82,7 +174,7 @@ class NState:
         # Rate laws (dCdt)
         self._generate_dcdts_sym(sp_syms,tr_syms) # generates self.dcdts_sym and self.dcdts_numk
         self.log_dcdts()
-        tr_sym2num = {symbols(name): tr['value'] for name, tr in self.transitions.items()}
+        tr_sym2num = {symbols(name): tr.k for name, tr in self.transitions.items()}
         self.dcdts_numk = self.dcdts_sym.subs(tr_sym2num)
         # self._lambdify_sym_dcdts(sp_syms) # Overwrites self._dcdt with a lambdified version of self.dcdts_sym
         self.t_dcdts = None 
@@ -109,72 +201,12 @@ class NState:
         labels = set()
         for name, data in self.species.items():
             # Validate labels
-            label = data.get('label',name)
-            if 'label' not in data.keys():
-                self.log.info(f"Label not found for species '{name}'. Using species name as label.")
-                self.species[name]['label'] = name
+            label = data.label
             if label in labels:
                 self.log.error(f"Duplicate label '{label}' found for species '{name}'.")
                 return False
             labels.add(label)
-        
-            # Validate concentrations
-            if not 'conc' in data.keys():
-                raise ValueError(f"Initial concentration not found in species['{name}']['conc'].")
-            conc = data.get('conc')
-            if not isinstance(conc, np.ndarray):
-                data['conc'] = np.array([conc])
         return True
-                
-    @staticmethod
-    def _parse_species_string(species_str):
-        """
-        Extract coefficient and species name from species string.
-
-        Args:
-        species_str (str): A species string, e.g., '2A'.
-
-        Returns:
-        tuple: A tuple of species name (str) and stoichiometric coefficient (int).
-        """
-        match = re.match(r"(\d*\.?\d*)(\D.*)", species_str)
-        if match and match.groups()[0]:
-            coeff = float(match.groups()[0])
-            coeff = integerable_float(coeff)
-        else:
-            coeff = 1
-        name = match.groups()[1] if match else species_str
-        return name,coeff
-                
-    def _format_transitions(self):
-        """
-        Format the transitions by extracting and combining coefficients and species names.
-        Is idempotent.
-        """
-        for _, tr in self.transitions.items():
-            for direction in ["source", "target"]:
-                parsed_species = {}
-                for sp in tr[direction]:
-                    if isinstance(sp, str):
-                        name, coeff = self._parse_species_string(sp)
-                    elif isinstance(sp, tuple):
-                        if len(sp) == 2:
-                            if isinstance(sp[0], str) and isinstance(sp[1], (int, float)):
-                                name, coeff = sp
-                            elif isinstance(sp[1], str) and isinstance(sp[2], (int, float)):
-                                coeff, name = sp
-                            else:
-                                raise ValueError(f"Invalid species tuple '{sp}' in transition '{tr}'.")
-                        else:
-                            raise ValueError(f"Invalid species tuple '{sp}' in transition '{tr}'.")
-                    else:
-                        raise ValueError(f"Invalid species '{sp}' in transition '{tr}'.")
-                    if name in parsed_species:
-                        parsed_species[name] += coeff # combine coeffs
-                    else:
-                        parsed_species[name] = coeff
-                tr[direction] = [(name, coeff) for name, coeff in parsed_species.items()]
-        return
 
     def _generate_dcdts_sym(self,sp_syms,tr_syms):
         """
@@ -183,20 +215,20 @@ class NState:
         # Generate dCdt's with symbolic species and rate constants 
         dcdts_sym = Matrix([0] * len(sp_syms))
         for tr_name, tr in self.transitions.items():
-            unscaled_rate = tr_syms[tr_name] * prod(sp_syms[sp_name]**coeff for sp_name, coeff in tr["source"])
-            for sp_name, coeff in tr["source"]:
-                dcdts_sym[self.species[sp_name]['index']] -= coeff * unscaled_rate
-            for sp_name, coeff in tr["target"]:
-                dcdts_sym[self.species[sp_name]['index']] += coeff * unscaled_rate
+            unscaled_rate = tr_syms[tr_name] * prod(sp_syms[sp_name]**coeff for sp_name, coeff in tr.source)
+            for sp_name, coeff in tr.source:
+                dcdts_sym[self.species[sp_name].index] -= coeff * unscaled_rate
+            for sp_name, coeff in tr.target:
+                dcdts_sym[self.species[sp_name].index] += coeff * unscaled_rate
         self.dcdts_sym = dcdts_sym 
 
         # Assign each dcdt to the respective species
         for sp_name, sp_data in self.species.items():
-            sp_data['dcdt'] = dcdts_sym[sp_data['index']]
-        self.log.info("Assigned symbolic dCdt's to species (self.species[NAME]['dcdt']).\n")
+            sp_data.dcdt = dcdts_sym[sp_data.index]
+        self.log.info("Assigned symbolic dCdt's to species (self.species[NAME].dcdt).\n")
 
         # Substitute rate constant symbols for values 
-        tr_sym2num = {symbols(name): tr['value'] for name, tr in self.transitions.items()}
+        tr_sym2num = {symbols(name): tr.k for name, tr in self.transitions.items()}
         self.dcdts_numk = self.dcdts_sym.subs(tr_sym2num)
         return 
     
@@ -229,15 +261,15 @@ class NState:
 
         for tr_name, tr in self.transitions.items():
             # Write rate law
-            rate = f"{tr_name} * " + " * ".join([f"{sp_name}^{coeff}" if coeff != 1 else f"{sp_name}" for sp_name,coeff in tr["source"]])
+            rate = f"{tr_name} * " + " * ".join([f"{sp_name}^{coeff}" if coeff != 1 else f"{sp_name}" for sp_name,coeff in tr.source])
             rate = rate.rstrip(" *")  # Remove trailing " *"
 
             # Add rate law to the eqns
-            for sp_name,coeff in tr["source"]:
+            for sp_name,coeff in tr.source:
                 term = f"{coeff} * {rate}" if coeff > 1 else rate
                 dcdt_dict[sp_name].append(f" - {term}")
 
-            for sp_name,coeff in tr["target"]:
+            for sp_name,coeff in tr.target:
                 term = f"{coeff} * {rate}" if coeff > 1 else rate
                 dcdt_dict[sp_name].append(f" + {term}")
 
@@ -281,10 +313,10 @@ class NState:
 
         # Fill stoich matrices and k vector
         for tr_name, tr in self.transitions.items():
-            tr_idx = tr['index']
-            self._k_vec[tr_idx] = tr['value']
-            reactant_vec = np.sum([self._unit_sp_mat[self.species[name]['index']] * coeff for name, coeff in tr["source"]],axis=0)
-            product_vec = np.sum([self._unit_sp_mat[self.species[name]['index']] * coeff for name, coeff in tr["target"]],axis=0)
+            tr_idx = tr.index
+            self._k_vec[tr_idx] = tr.k
+            reactant_vec = np.sum([self._unit_sp_mat[self.species[name].index] * coeff for name, coeff in tr.source],axis=0)
+            product_vec = np.sum([self._unit_sp_mat[self.species[name].index] * coeff for name, coeff in tr.target],axis=0)
             
             self._stoich_reactant_mat[tr_idx, :] = reactant_vec  
             #self._stoich_product_mat[tr_idx, :] = product_vec   # not used
@@ -331,8 +363,8 @@ class NState:
         J_log[1:, 1:] = self.J_sym
 
         for sp_name,sp_data in self.species.items():
-            J_log[0, sp_data['index']+1] = symbols(sp_name)
-            J_log[sp_data['index']+1, 0] = symbols(f'd[{sp_name}]/dt')
+            J_log[0, sp_data.index+1] = symbols(sp_name)
+            J_log[sp_data.index+1, 0] = symbols(f'd[{sp_name}]/dt')
         J_log[0,0] = symbols("_")
 
         J_log_str = "Jacobian (including row and column labels):\n"
@@ -357,7 +389,7 @@ class NState:
                     output_raw=False, dense_output=False):
         """
         Solve the ODEs of species concentration wrt time for the system. 
-        Will update self.species['conc'] with the respective solutions.
+        Will update self.species.conc with the respective solutions.
 
         Arguments:
         t_eval (np.array): Time points for ODE solutions.
@@ -365,7 +397,7 @@ class NState:
         t_span (tuple): Time span for ODE solutions.
 
         conc0_dict (dict: {str: np.ndarray}): Dictionary of {species_name: conc0_arr} pairs for initial concentrations to simulate. 
-            Unprovided species will use self.species[NAME]['conc'][0] as a single-point initial concentration.
+            Unprovided species will use self.species[NAME].conc[0] as a single-point initial concentration.
             Using multiple conc0's will nest the concentrations in an array and raw solutions in a list.
                 The conc0 combinations are saved to self.conc0_mat. 
                 If not using conc0_dict, self.conc0_mat will still be set to the single conc0 vector. 
@@ -383,7 +415,7 @@ class NState:
         dense_output (bool): If True, save a scipy.integrate.OdeSolution instance to self.soln_continuous(t)
             If using multiple conc0's, this will be a list of functions that share indexing with the other outputs,
                 and can be called like "self.soln_continuous[idx](t)".
-            Access a specific species conc like soln_continuous(t)[self.species[NAME]['index']].
+            Access a specific species conc like soln_continuous(t)[self.species[NAME].index].
 
         """
         #TODO: check how combinations are arranged and make sure its intuitive to separate and use them (ie the indexing is clear)
@@ -396,12 +428,12 @@ class NState:
             # at least a warning if a weird solution is found 
         if conc0_dict:
             combinations = product(*(
-                np.atleast_1d(conc0_dict.get(sp_name, [np.atleast_1d(sp_data['conc']).flatten()[0]])) 
+                np.atleast_1d(conc0_dict.get(sp_name, [np.atleast_1d(sp_data.conc).flatten()[0]])) 
                 for sp_name, sp_data in self.species.items()
             ))
             conc0_mat = np.vstack([comb for comb in combinations])
         else:
-            conc0_mat = np.atleast_2d([np.atleast_1d(sp_data['conc']).flatten()[0] for _, sp_data in self.species.items()])
+            conc0_mat = np.atleast_2d([np.atleast_1d(sp_data.conc).flatten()[0] for _, sp_data in self.species.items()])
         conc0_mat_len = len(conc0_mat)
         self.log.info(f"Solving the timecourse from {conc0_mat_len} initial concentration vectors...")
         self.conc0_mat = conc0_mat
@@ -437,8 +469,8 @@ class NState:
             self.t_dcdts = soln.t
             self.log.info(f"\tTime saved to self.t_dcdts (np.array)")
             for _, data in self.species.items():
-                data['conc'] = soln.y[data['index']]
-            self.log.info(f"\tConcentrations saved respectively to self.species[sp_name]['conc'] (np.array)")
+                data.conc = soln.y[data.index]
+            self.log.info(f"\tConcentrations saved respectively to self.species[sp_name].conc (np.array)")
             if dense_output:
                 self.soln_continuous = soln.sol
                 self.log.info(f"\tSaving continuous solution function to self.soln_continuous(t) (scipy.integrate.OdeSolution)")
@@ -449,8 +481,8 @@ class NState:
             self.t_dcdts = [soln.t for soln in solns] 
             self.log.info(f"\t{conc0_mat_len} time vectors saved to self.t_dcdts (list of np.arrays)")
             for _, data in self.species.items():
-                data['conc'] = [soln.y[data['index']] for soln in solns]
-            self.log.info(f"\t{conc0_mat_len} concentration vectors saved respectively to self.species[sp_name]['conc'] (list of np.arrays)")
+                data.conc = [soln.y[data.index] for soln in solns]
+            self.log.info(f"\t{conc0_mat_len} concentration vectors saved respectively to self.species[sp_name].conc (list of np.arrays)")
             if dense_output:
                 self.soln_continuous = [soln.sol for soln in solns] 
                 self.log.info(f"\tSaving list of continuous solution functions to self.soln_continuous (list of scipy.integrate.OdeSolution's)")
@@ -483,7 +515,7 @@ class NState:
         #TODO: show pop dist is like odes
         # Initialize
         current_time = 0.0
-        conc = np.array([np.atleast_1d(sp['conc'])[0] for _, sp in self.species.items()])
+        conc = np.array([np.atleast_1d(sp.conc)[0] for _, sp in self.species.items()])
         times = [current_time]
         concentrations = [conc.copy()]
         transitions_list = list(self.transitions.values())  # Convert dictionary values to a list for indexing
@@ -492,7 +524,7 @@ class NState:
         while current_time < t[-1]:
             rate = np.zeros(len(transitions_list))
             for tr_idx, tr in enumerate(transitions_list):
-                tr_rate = tr['value'] * np.prod([conc[self.species[sp_name]['index']] ** coeff for sp_name,coeff in tr["source"]])
+                tr_rate = tr.k * np.prod([conc[self.species[sp_name].index] ** coeff for sp_name,coeff in tr.source])
                 rate[tr_idx] = tr_rate
 
             total_rate = np.sum(rate)
@@ -510,10 +542,10 @@ class NState:
             event = np.searchsorted(cumulative_rate, np.random.rand() * total_rate)
 
             # Update concentrations
-            for coeff, sp_name in transitions_list[event]["source"]:
-                conc[self.species[sp_name]['index']] -= coeff
-            for coeff, sp_name in transitions_list[event]["target"]:
-                conc[self.species[sp_name]['index']] += coeff
+            for coeff, sp_name in transitions_list[event].source:
+                conc[self.species[sp_name].index] -= coeff
+            for coeff, sp_name in transitions_list[event].target:
+                conc[self.species[sp_name].index] += coeff
 
             times.append(current_time)
             concentrations.append(conc.copy())
@@ -535,7 +567,7 @@ class NState:
             # Format output to match deterministic function if needed
             solution = {'time': t, 'concentrations': interpolated_concs}
             for idx, sp in enumerate(self.species.keys()):
-                self.species[sp]['conc'] = solution['concentrations'][idx]
+                self.species[sp].conc = solution['concentrations'][idx]
             return solution
 
     def sum_conc(self,whitelist:list=None,blacklist:list=None):
@@ -560,18 +592,18 @@ class NState:
         elif blacklist:
             species_names = [name for name in species_names if name not in blacklist]
 
-        total_concentration = np.sum([self.species[name]['conc'] for name in species_names], axis=0)
+        total_concentration = np.sum([self.species[name].conc for name in species_names], axis=0)
 
         return total_concentration
 
     def conc_mat2dict(self,conc_mat):
         """
-        Save species vectors from a concentration matrix to the respective species[NAME]['conc'] based on species[NAME]['index'].
+        Save species vectors from a concentration matrix to the respective species[NAME].conc based on species[NAME].index.
         Useful for saving the output of a continuous solution to the species dictionary.
             Don't forget `system.t_dcdts = t`
         """
         for _, sp_data in self.species.items():
-            sp_data['conc'] = conc_mat[sp_data['index']]
+            sp_data.conc = conc_mat[sp_data.index]
         return
 
 

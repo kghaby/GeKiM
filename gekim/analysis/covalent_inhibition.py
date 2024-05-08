@@ -45,7 +45,7 @@ def kobs_uplim_fit_to_occ_final_wrt_t(t: np.ndarray, occ_final: np.ndarray, nond
     
     Example:
     ```python
-    fit_output =  ci.kobs_uplim_fit_to_occ_final_wrt_t(t,system.traj_deterministic[:,system.species["EI"]['index']],nondefault_params={"Etot":{"fix":concE0}})
+    fit_output =  ci.kobs_uplim_fit_to_occ_final_wrt_t(t,system.system.species["EI"].conc,nondefault_params={"Etot":{"fix":concE0}})
     ```
     Will fit kobs and uplim to the concentration of EI over time, fixing Etot at concE0.
     '''

@@ -28,10 +28,10 @@ schemes["3S_vani"] = {
         "EI": {"conc": 0, "label": r"E-I"},
     },
     "transitions": {
-        "k1": {"value": kon, "source": ["E", "I"], "target": ["E_I"], "label": r"$k_{on}$"},
-        "k2": {"value": koff, "source": ["E_I"], "target": ["E", "I"], "label": r"$k_{off}$"},
-        "k3": {"value": kinactf, "source": ["E_I"], "target": ["EI"]}, #irrev step
-        "k4": {"value": kinactb, "source": ["EI"], "target": ["E_I"]},
+        "k1": {"k": kon, "source": ["E", "I"], "target": ["E_I"], "label": r"$k_{on}$"},
+        "k2": {"k": koff, "source": ["E_I"], "target": ["E", "I"], "label": r"$k_{off}$"},
+        "k3": {"k": kinactf, "source": ["E_I"], "target": ["EI"]}, #irrev step
+        "k4": {"k": kinactb, "source": ["EI"], "target": ["E_I"]},
     },
 }
 schemes["3S_mod1.1"] = {
@@ -42,10 +42,10 @@ schemes["3S_mod1.1"] = {
         "EI": {"conc": 0, "label": r"E-I"},
     },
     "transitions": {
-        "k1": {"value": kon, "source": ["E", "2.0I"], "target": ["E_I"], "label": r"$k_{on}$"},
-        "k2": {"value": koff, "source": ["E_I"], "target": ["E", "2.0I"], "label": r"$k_{off}$"},
-        "k3": {"value": kinactf, "source": ["3E_I"], "target": ["7EI"]}, #irrev step
-        "k4": {"value": kinactb, "source": ["7EI"], "target": ["3E_I"]},
+        "k1": {"k": kon, "source": ["E", "2.0I"], "target": ["E_I"], "label": r"$k_{on}$"},
+        "k2": {"k": koff, "source": ["E_I"], "target": ["E", "2.0I"], "label": r"$k_{off}$"},
+        "k3": {"k": kinactf, "source": ["3E_I"], "target": ["7EI"]}, #irrev step
+        "k4": {"k": kinactb, "source": ["7EI"], "target": ["3E_I"]},
     },
 }
 schemes["3S_mod1.2"] = {
@@ -56,10 +56,10 @@ schemes["3S_mod1.2"] = {
         "EI": {"conc": 0, "label": r"E-I"},
     },
     "transitions": {
-        "k1": {"value": kon, "source": ["E", "I", "I"], "target": ["E_I"], "label": r"$k_{on}$"},
-        "k2": {"value": koff, "source": ["E_I"], "target": ["E", "I", "I"], "label": r"$k_{off}$"},
-        "k3": {"value": kinactf, "source": ["E_I","E_I","E_I"], "target": ["7EI"]}, #irrev step
-        "k4": {"value": kinactb, "source": ["7EI"], "target": ["E_I","E_I","E_I"]},
+        "k1": {"k": kon, "source": ["E", "I", "I"], "target": ["E_I"], "label": r"$k_{on}$"},
+        "k2": {"k": koff, "source": ["E_I"], "target": ["E", "I", "I"], "label": r"$k_{off}$"},
+        "k3": {"k": kinactf, "source": ["E_I","E_I","E_I"], "target": ["7EI"]}, #irrev step
+        "k4": {"k": kinactb, "source": ["7EI"], "target": ["E_I","E_I","E_I"]},
     },
 }
 schemes["3S_mod2.1"] = {
@@ -70,10 +70,10 @@ schemes["3S_mod2.1"] = {
         "EI": {"conc": 0, "label": r"E-I"},
     },
     "transitions": {
-        "k1": {"value": kon, "source": ["2E", "I"], "target": ["E_I","E"], "label": r"$k_{on}$"},
-        "k2": {"value": koff, "source": ["E_I","E"], "target": ["2E", "I"], "label": r"$k_{off}$"},
-        "k3": {"value": kinactf, "source": ["E_I"], "target": ["EI"]}, #irrev step
-        "k4": {"value": kinactb, "source": ["EI"], "target": ["E_I"]},
+        "k1": {"k": kon, "source": ["2E", "I"], "target": ["E_I","E"], "label": r"$k_{on}$"},
+        "k2": {"k": koff, "source": ["E_I","E"], "target": ["2E", "I"], "label": r"$k_{off}$"},
+        "k3": {"k": kinactf, "source": ["E_I"], "target": ["EI"]}, #irrev step
+        "k4": {"k": kinactb, "source": ["EI"], "target": ["E_I"]},
     },
 }
 
@@ -87,21 +87,21 @@ def _dcdt_old(system, t, concentrations):
     """ 
     dcdt_arr = np.zeros_like(concentrations)
     for tr in system.transitions.values():
-        rate_constant = tr['value']
-        rate = rate_constant * np.prod([concentrations[system.species[sp_name]['index']] ** coeff for sp_name,coeff in tr["source"]])
+        rate_constant = tr.k
+        rate = rate_constant * np.prod([concentrations[system.species[sp_name].index] ** coeff for sp_name,coeff in tr.source])
         # Iterating through like this is beneficial because it captures stoichiometry that is evident in the list rather than coefficient 
             # (eg "source": ["E","E", "I"] is equal to "source": ["2E", "I"])
-        for sp_name,coeff in tr["source"]:
-            dcdt_arr[system.species[sp_name]['index']] -= coeff * rate
-        for sp_name,coeff in tr["target"]:
-            dcdt_arr[system.species[sp_name]['index']] += coeff * rate
+        for sp_name,coeff in tr.source:
+            dcdt_arr[system.species[sp_name].index] -= coeff * rate
+        for sp_name,coeff in tr.target:
+            dcdt_arr[system.species[sp_name].index] += coeff * rate
     return dcdt_arr
 
 def _solve_dcdts_old(system, t, method='BDF', rtol=1e-6, atol=1e-8, output_raw=False):
     """
     Solve the ODEs for the system.
     """
-    conc0 = np.array([np.atleast_1d(sp['conc'])[0] for _, sp in system.species.items()])
+    conc0 = np.array([np.atleast_1d(sp.conc)[0] for _, sp in system.species.items()])
     t_span = (t[0], t[-1])
     system.log_dcdts()
 
@@ -115,7 +115,7 @@ def _solve_dcdts_old(system, t, method='BDF', rtol=1e-6, atol=1e-8, output_raw=F
 
         system.t = t
         for name,data in system.species.items():
-            data['conc'] = solution.y[data['index']]
+            data.conc = solution.y[data.index]
 
         system.logger.info("ODEs solved successfully.")
         if output_raw:
@@ -131,7 +131,7 @@ for name,scheme in schemes.items():
     system = gk.schemes.NState(scheme,quiet=True)
     #sol = _solve_dcdts_old(system,t,output_raw=True) #testing with old (nonvectorized) version
     sol = system.solve_dcdts(t,output_raw=True)
-    final_state = system.species["EI"]['conc']
+    final_state = system.species["EI"].conc
     all_bound = system.sum_conc(blacklist=["E","I"])
     fit_output = ci.kobs_uplim_fit_to_occ_final_wrt_t(
         t,final_state,nondefault_params={"Etot":{"fix":concE0}})
@@ -145,7 +145,7 @@ for name,scheme in schemes.items():
         for species, sp_data in system.species.items():
             if species == "I":
                 continue
-            plt.plot(t, sp_data['conc'], label=sp_data['label'],color=sp_data["color"])
+            plt.plot(t, sp_data.conc, label=sp_data.label,color=sp_data.color)
 
         # All bound states
         all_bound = system.sum_conc(blacklist=["E","I"])

@@ -148,10 +148,10 @@ class NState:
             ) for name, data in config['transitions'].items()
         }
 
-        self.setup_data()
+        self.setup_calculations()
         self.log.info(f"NState system initialized successfully.\n")
 
-    def setup_data(self):
+    def setup_calculations(self):
         """
         Use this if you added transitions or species after initialization.
         This is called in __init__ so you don't need to call it again unless you change the scheme.
@@ -240,8 +240,8 @@ class NState:
         Not currently utilized, but this might be useful someday.
         """
         species_vec = Matrix([sp_syms[name] for name in self.species])
-        dcdt_func = lambdify(species_vec, self.dcdts_numk, 'numpy')
-        self._dcdt = lambda t, y: dcdt_func(*y).flatten()
+        dcdts_func = lambdify(species_vec, self.dcdts_numk, 'numpy')
+        self._dcdts = lambda t, y: dcdts_func(*y).flatten()
         return
 
     def log_dcdts(self,force_print=False):
@@ -375,7 +375,7 @@ class NState:
         
         return
 
-    def _dcdt(self, t, conc):
+    def _dcdts(self, t, conc):
         """
         Cannot model rates that are not simple power laws (eg dynamic inhibition, cooperativity, time dependent params). 
         But most of these can be baked in on the schematic level I think. 
@@ -383,8 +383,8 @@ class NState:
         #TODO: Use higher dimensionality conc arrays to process multiple input concs at once? 
         C_Nr = np.prod(np.power(conc, self._stoich_reactant_mat), axis=1) # state dependencies
         N_K = np.dot(self._k_diag,self._stoich_mat) # interactions
-        dCdt = np.dot(C_Nr,N_K)
-        return dCdt
+        dCdts = np.dot(C_Nr,N_K)
+        return dCdts
 
     def solve_dcdts(self, t_eval: np.ndarray = None, t_span: tuple = None, conc0_dict: dict = None, method='BDF', rtol=1e-6, atol=1e-8, 
                     output_raw=False, dense_output=False):
@@ -457,7 +457,7 @@ class NState:
                 else:
                     t_span = (t_eval[0], t_eval[-1])
 
-            soln = solve_ivp(self._dcdt, t_span=t_span, y0=conc0, method=method, t_eval=t_eval, 
+            soln = solve_ivp(self._dcdts, t_span=t_span, y0=conc0, method=method, t_eval=t_eval, 
                                 rtol=rtol, atol=atol, jac=self.J_func_wrap, dense_output=dense_output) 
                 # vectorized=True makes legacy dcdt func slower bc low len(conc0) I think
             if not soln.success:

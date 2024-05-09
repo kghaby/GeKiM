@@ -80,34 +80,34 @@ schemes["3S_mod2.1"] = {
 gk.utils.Plotting.assign_colors_to_species(schemes,saturation_range=(0.5,0.8),lightness_range=(0.4,0.5),overwrite_existing=False,seed=1)
 
 # Old NState functions for making sure new versions produce the same results
-def _dcdt_old(system, t, concentrations):
+def _ode_old(system, t, concentrations):
     """
     Compute the derivative of concentrations with respect to time.
     Can directly handle non-linear reactions (eg stoich coeff > 1)
     """ 
-    dcdt_arr = np.zeros_like(concentrations)
+    ode_arr = np.zeros_like(concentrations)
     for tr in system.transitions.values():
         rate_constant = tr.k
         rate = rate_constant * np.prod([concentrations[system.species[sp_name].index] ** coeff for sp_name,coeff in tr.source])
         # Iterating through like this is beneficial because it captures stoichiometry that is evident in the list rather than coefficient 
             # (eg "source": ["E","E", "I"] is equal to "source": ["2E", "I"])
         for sp_name,coeff in tr.source:
-            dcdt_arr[system.species[sp_name].index] -= coeff * rate
+            ode_arr[system.species[sp_name].index] -= coeff * rate
         for sp_name,coeff in tr.target:
-            dcdt_arr[system.species[sp_name].index] += coeff * rate
-    return dcdt_arr
+            ode_arr[system.species[sp_name].index] += coeff * rate
+    return ode_arr
 
-def _solve_dcdts_old(system, t, method='BDF', rtol=1e-6, atol=1e-8, output_raw=False):
+def _solve_odes_old(system, t, method='BDF', rtol=1e-6, atol=1e-8, output_raw=False):
     """
     Solve the ODEs for the system.
     """
     conc0 = np.array([np.atleast_1d(sp.conc)[0] for _, sp in system.species.items()])
     t_span = (t[0], t[-1])
-    system.log_dcdts()
+    system.log_odes()
 
     try:
         solution = solve_ivp(
-            fun=lambda t, conc: _dcdt_old(system, t, conc),
+            fun=lambda t, conc: _ode_old(system, t, conc),
             t_span=t_span, y0=conc0, t_eval=t, method=method, rtol=rtol, atol=atol,
         )
         if not solution.success:
@@ -129,8 +129,8 @@ def _solve_dcdts_old(system, t, method='BDF', rtol=1e-6, atol=1e-8, output_raw=F
 # Solve gekim systems 
 for name,scheme in schemes.items():
     system = gk.schemes.NState(scheme,quiet=True)
-    #sol = _solve_dcdts_old(system,t,output_raw=True) #testing with old (nonvectorized) version
-    sol = system.solve_dcdts(t,output_raw=True)
+    #sol = _solve_odes_old(system,t,output_raw=True) #testing with old (nonvectorized) version
+    sol = system.solve_odes(t,output_raw=True)
     final_state = system.species["EI"].conc
     all_bound = system.sum_conc(blacklist=["E","I"])
     fit_output = ci.kobs_uplim_fit_to_occ_final_wrt_t(
@@ -172,7 +172,7 @@ class ThreeStateVani():
         self.sol=None
 
     @staticmethod
-    def dcdt(t,concArr, params):
+    def ode(t,concArr, params):
         kon,koff,kinactf,kinactb=params
         I, E, E_I, EI  = concArr
         dIdt = koff*E_I - kon*I*E
@@ -184,7 +184,7 @@ class ThreeStateVani():
     def solve(self, t):
         t_span = (t[0], t[-1])
         params = (self.kon, self.koff, self.kinactf, self.kinactb)
-        solution = solve_ivp(self.dcdt, t_span, self.conc0Arr, t_eval=t, args=(params,), method='BDF', rtol=1e-6, atol=1e-8)
+        solution = solve_ivp(self.ode, t_span, self.conc0Arr, t_eval=t, args=(params,), method='BDF', rtol=1e-6, atol=1e-8)
         return solution
 
 class ThreeStateMod1dot1():
@@ -198,7 +198,7 @@ class ThreeStateMod1dot1():
         self.sol=None
 
     @staticmethod
-    def dcdt(t,concArr, params):
+    def ode(t,concArr, params):
         kon,koff,kinactf,kinactb=params
         I, E, E_I, EI  = concArr
         dIdt = 2*koff*E_I - 2*kon*(I**2)*E
@@ -210,7 +210,7 @@ class ThreeStateMod1dot1():
     def solve(self, t):
         t_span = (t[0], t[-1])
         params = (self.kon, self.koff, self.kinactf, self.kinactb)
-        solution = solve_ivp(self.dcdt, t_span, self.conc0Arr, t_eval=t, args=(params,), method='BDF', rtol=1e-6, atol=1e-8)
+        solution = solve_ivp(self.ode, t_span, self.conc0Arr, t_eval=t, args=(params,), method='BDF', rtol=1e-6, atol=1e-8)
         return solution
 
 class ThreeStateMod1dot2():
@@ -224,7 +224,7 @@ class ThreeStateMod1dot2():
         self.sol=None
 
     @staticmethod
-    def dcdt(t,concArr, params):
+    def ode(t,concArr, params):
         kon,koff,kinactf,kinactb=params
         I, E, E_I, EI  = concArr
         dIdt = koff*E_I + koff*E_I - kon*I*I*E - kon*I*I*E
@@ -236,7 +236,7 @@ class ThreeStateMod1dot2():
     def solve(self, t):
         t_span = (t[0], t[-1])
         params = (self.kon, self.koff, self.kinactf, self.kinactb)
-        solution = solve_ivp(self.dcdt, t_span, self.conc0Arr, t_eval=t, args=(params,), method='BDF', rtol=1e-6, atol=1e-8)
+        solution = solve_ivp(self.ode, t_span, self.conc0Arr, t_eval=t, args=(params,), method='BDF', rtol=1e-6, atol=1e-8)
         return solution
 
 class ThreeStateMod2dot1():
@@ -250,7 +250,7 @@ class ThreeStateMod2dot1():
         self.sol=None
 
     @staticmethod
-    def dcdt(t,concArr, params):
+    def ode(t,concArr, params):
         kon,koff,kinactf,kinactb=params
         I, E, E_I, EI  = concArr
         dIdt = koff*E_I*E - kon*I*(E**2) 
@@ -262,7 +262,7 @@ class ThreeStateMod2dot1():
     def solve(self, t):
         t_span = (t[0], t[-1])
         params = (self.kon, self.koff, self.kinactf, self.kinactb)
-        solution = solve_ivp(self.dcdt, t_span, self.conc0Arr, t_eval=t, args=(params,), method='BDF', rtol=1e-6, atol=1e-8)
+        solution = solve_ivp(self.ode, t_span, self.conc0Arr, t_eval=t, args=(params,), method='BDF', rtol=1e-6, atol=1e-8)
         return solution
 
 

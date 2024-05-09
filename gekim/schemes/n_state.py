@@ -11,7 +11,7 @@ from ..utils import integerable_float,Logger
 #TODO: find_linear_paths in kinetics2 and more general pathfinder in utils?
     
 class Species:
-    def __init__(self, name: str, conc: np.ndarray|float, label=None, color=None, index=None, dcdt=None):
+    def __init__(self, name: str, conc: np.ndarray|float, label=None, color=None, index=None, ode=None):
         """
         Recommended to initialize with the following arguments:
         name (str): Name of the species.
@@ -21,14 +21,14 @@ class Species:
 
         Args that should be left alone unless you know what you're doing:
         index (int): Index of the species in the system. Added by the NState class.
-        dcdt (float): Symbolic rate law for the species. Added by the NState class.
+        ode (float): Symbolic rate law for the species. Added by the NState class.
         """
         self.name = name
         self.conc = np.array([conc]) if np.isscalar(conc) else np.array(conc)
         self.label = label or name
         self.index = index
         self.color = color
-        self.dcdt = dcdt
+        self.ode = ode
         self.sym = symbols(name)
 
     def __repr__(self):
@@ -178,13 +178,13 @@ class NState:
         sp_syms = {name: symbols(name) for name in self.species}
         tr_syms = {name: symbols(name) for name in self.transitions}
 
-        # Rate laws (dCdt)
-        self._generate_dcdts_sym(sp_syms,tr_syms) # generates self.dcdts_sym and self.dcdts_numk
-        self.log_dcdts()
+        # Rate laws (ode)
+        self._generate_odes_sym(sp_syms,tr_syms) # generates self.odes_sym and self.odes_numk
+        self.log_odes()
         tr_sym2num = {symbols(name): tr.k for name, tr in self.transitions.items()}
-        self.dcdts_numk = self.dcdts_sym.subs(tr_sym2num)
-        self._lambdify_sym_dcdts(sp_syms) # Overwrites self._dcdt with a lambdified version of self.dcdts_sym
-        self.t_dcdts = None 
+        self.odes_numk = self.odes_sym.subs(tr_sym2num)
+        self._lambdify_sym_odes(sp_syms) # Overwrites self._ode with a lambdified version of self.odes_sym
+        self.t_odes = None 
 
         # Jacobian
         self._generate_jac(sp_syms) # generates self.J_sym, self.J_symsp_numtr, self.J_func_wrap
@@ -215,46 +215,46 @@ class NState:
             labels.add(label)
         return True
 
-    def _generate_dcdts_sym(self,sp_syms,tr_syms):
+    def _generate_odes_sym(self,sp_syms,tr_syms):
         """
         Generate symbolic rate laws for each species.
         """
-        # Generate dCdt's with symbolic species and rate constants 
-        dcdts_sym = Matrix([0] * len(sp_syms))
+        # Generate ODE's with symbolic species and rate constants 
+        odes_sym = Matrix([0] * len(sp_syms))
         for tr_name, tr in self.transitions.items():
             unscaled_rate = tr_syms[tr_name] * prod(sp_syms[sp_name]**coeff for sp_name, coeff in tr.source)
             for sp_name, coeff in tr.source:
-                dcdts_sym[self.species[sp_name].index] -= coeff * unscaled_rate
+                odes_sym[self.species[sp_name].index] -= coeff * unscaled_rate
             for sp_name, coeff in tr.target:
-                dcdts_sym[self.species[sp_name].index] += coeff * unscaled_rate
-        self.dcdts_sym = dcdts_sym 
+                odes_sym[self.species[sp_name].index] += coeff * unscaled_rate
+        self.odes_sym = odes_sym 
 
-        # Assign each dcdt to the respective species
+        # Assign each ode to the respective species
         for sp_name, sp_data in self.species.items():
-            sp_data.dcdt = dcdts_sym[sp_data.index]
-        self.log.info("Assigned symbolic dCdt's to species (self.species[NAME].dcdt).\n")
+            sp_data.ode = odes_sym[sp_data.index]
+        self.log.info("Assigned symbolic ODE's to species (self.species[NAME].ode).\n")
 
         # Substitute rate constant symbols for values 
         tr_sym2num = {symbols(name): tr.k for name, tr in self.transitions.items()}
-        self.dcdts_numk = self.dcdts_sym.subs(tr_sym2num)
+        self.odes_numk = self.odes_sym.subs(tr_sym2num)
         return 
     
-    def _lambdify_sym_dcdts(self,sp_syms):
+    def _lambdify_sym_odes(self,sp_syms):
         """
-        Convert the symbolic dCdt vector (with numerical rate constants) into a numerical function.
-        This overwrites the native self._dcdt function. It's just as fast typically, if not a little faster.
+        Convert the symbolic ode vector (with numerical rate constants) into a numerical function.
+        This overwrites the native self._ode function. It's just as fast typically, if not a little faster.
         Not currently utilized, but this might be useful someday.
         """
         species_vec = Matrix([sp_syms[name] for name in self.species])
-        dcdts_func = lambdify(species_vec, self.dcdts_numk, 'numpy')
-        self._dcdts = lambda t, y: dcdts_func(*y).flatten()
+        odes_func = lambdify(species_vec, self.odes_numk, 'numpy')
+        self._odes = lambda t, y: odes_func(*y).flatten()
         return
 
-    def log_dcdts(self,force_print=False):
+    def log_odes(self,force_print=False):
         """
-        Log the symbolic dCdt's.
+        Log the symbolic ODE's.
         """
-        dcdt_dict = {}
+        ode_dict = {}
         max_header_length = 0
 
         # Find the max length for the headers
@@ -264,7 +264,7 @@ class NState:
 
         # Write eqn headers and rate laws
         for sp_name in self.species:
-            dcdt_dict[sp_name] = [f"d[{sp_name}]/dt".ljust(max_header_length) + " ="]
+            ode_dict[sp_name] = [f"d[{sp_name}]/dt".ljust(max_header_length) + " ="]
 
         for tr_name, tr in self.transitions.items():
             # Write rate law
@@ -274,26 +274,26 @@ class NState:
             # Add rate law to the eqns
             for sp_name,coeff in tr.source:
                 term = f"{coeff} * {rate}" if coeff != 1 else rate
-                dcdt_dict[sp_name].append(f" - {term}")
+                ode_dict[sp_name].append(f" - {term}")
 
             for sp_name,coeff in tr.target:
                 term = f"{coeff} * {rate}" if coeff != 1 else rate
-                dcdt_dict[sp_name].append(f" + {term}")
+                ode_dict[sp_name].append(f" + {term}")
 
         # Construct the final string
-        dcdt_log = "dCdt's:\n\n"
-        for sp_name, eqn_parts in dcdt_dict.items():
+        ode_log = "ODE's:\n\n"
+        for sp_name, eqn_parts in ode_dict.items():
             # Aligning '+' and '-' symbols
             eqn_header = eqn_parts[0]
             terms = eqn_parts[1:]
             aligned_terms = [eqn_header + " " + terms[0]] if terms else [eqn_header]
             aligned_terms += [f"{'':>{max_header_length + 3}}{term}" for term in terms[1:]]
             formatted_eqn = "\n".join(aligned_terms)
-            dcdt_log += formatted_eqn + '\n\n'
+            ode_log += formatted_eqn + '\n\n'
 
-        self.log.info(dcdt_log)
+        self.log.info(ode_log)
         if force_print:
-            print(dcdt_log)
+            print(ode_log)
         return
 
     def _generate_matrices_for_rates(self):
@@ -348,10 +348,10 @@ class NState:
         species_vec = Matrix(list(sp_syms.values()))
 
         # Symbolic Jacobian
-        self.J_sym = self.dcdts_sym.jacobian(species_vec)
+        self.J_sym = self.odes_sym.jacobian(species_vec)
 
         # Numerical Jacobian
-        self.J_symsp_numtr = self.dcdts_numk.jacobian(species_vec) # Symbolic species, numeric transition rate constants
+        self.J_symsp_numtr = self.odes_numk.jacobian(species_vec) # Symbolic species, numeric transition rate constants
         J_func = lambdify(species_vec, self.J_symsp_numtr, 'numpy') # Make numerical function. Accepts 
         self.J_func_wrap = lambda t, y: J_func(*y) # Wrap J_func so that t,y is passed to the function to be compatible with solve_ivp
 
@@ -381,7 +381,7 @@ class NState:
         
         return
 
-    def _dcdts(self, t, conc):
+    def _odes(self, t, conc):
         """
         Cannot model rates that are not simple power laws (eg dynamic inhibition, cooperativity, time dependent params). 
         But most of these can be baked in on the schematic level I think. 
@@ -389,10 +389,10 @@ class NState:
         #TODO: Use higher dimensionality conc arrays to process multiple input concs at once? 
         C_Nr = np.prod(np.power(conc, self._stoich_reactant_mat), axis=1) # state dependencies
         N_K = np.dot(self._k_diag,self._stoich_mat) # interactions
-        dCdts = np.dot(C_Nr,N_K)
-        return dCdts
+        odes = np.dot(C_Nr,N_K)
+        return odes
 
-    def solve_dcdts(self, t_eval: np.ndarray = None, t_span: tuple = None, conc0_dict: dict = None, method='BDF', rtol=1e-6, atol=1e-8, 
+    def solve_odes(self, t_eval: np.ndarray = None, t_span: tuple = None, conc0_dict: dict = None, method='BDF', rtol=1e-6, atol=1e-8, 
                     output_raw=False, dense_output=False):
         """
         Solve the ODEs of species concentration wrt time for the system. 
@@ -463,9 +463,9 @@ class NState:
                 else:
                     t_span = (t_eval[0], t_eval[-1])
 
-            soln = solve_ivp(self._dcdts, t_span=t_span, y0=conc0, method=method, t_eval=t_eval, 
+            soln = solve_ivp(self._odes, t_span=t_span, y0=conc0, method=method, t_eval=t_eval, 
                                 rtol=rtol, atol=atol, jac=self.J_func_wrap, dense_output=dense_output) 
-                # vectorized=True makes legacy dcdt func slower bc low len(conc0) I think
+                # vectorized=True makes legacy ode func slower bc low len(conc0) I think
             if not soln.success:
                 raise RuntimeError("FAILED: " + soln.message)
             solns.append(soln)
@@ -473,8 +473,8 @@ class NState:
         self.log.info("ODEs solved successfully. Saving data...")
 
         if conc0_mat_len == 1:
-            self.t_dcdts = soln.t
-            self.log.info(f"\tTime saved to self.t_dcdts (np.array)")
+            self.t_odes = soln.t
+            self.log.info(f"\tTime saved to self.t_odes (np.array)")
             for _, data in self.species.items():
                 data.conc = soln.y[data.index]
             self.log.info(f"\tConcentrations saved respectively to self.species[sp_name].conc (np.array)")
@@ -485,8 +485,8 @@ class NState:
                 self.soln_continuous = None
                 self.log.info("\tNot saving continuous solution. Use dense_output=True to save it to self.soln_continuous")
         else:
-            self.t_dcdts = [soln.t for soln in solns] 
-            self.log.info(f"\t{conc0_mat_len} time vectors saved to self.t_dcdts (list of np.arrays)")
+            self.t_odes = [soln.t for soln in solns] 
+            self.log.info(f"\t{conc0_mat_len} time vectors saved to self.t_odes (list of np.arrays)")
             for _, data in self.species.items():
                 data.conc = [soln.y[data.index] for soln in solns]
             self.log.info(f"\t{conc0_mat_len} concentration vectors saved respectively to self.species[sp_name].conc (list of np.arrays)")
@@ -607,7 +607,7 @@ class NState:
         """
         Save species vectors from a concentration matrix to the respective species[NAME].conc based on species[NAME].index.
         Useful for saving the output of a continuous solution to the species dictionary.
-            Don't forget `system.t_dcdts = t`
+            Don't forget `system.t_odes = t`
         """
         for _, sp_data in self.species.items():
             sp_data.conc = conc_mat[sp_data.index]

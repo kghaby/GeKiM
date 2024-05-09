@@ -22,6 +22,7 @@ class Species:
         Args that should be left alone unless you know what you're doing:
         index (int): Index of the species in the system. Added by the NState class.
         ode (float): Symbolic rate law for the species. Added by the NState class.
+
         """
         self.name = name
         self.conc = np.array([conc]) if np.isscalar(conc) else np.array(conc)
@@ -30,6 +31,7 @@ class Species:
         self.color = color
         self.ode = ode
         self.sym = symbols(name)
+        self.prob = None # added by simulate
 
     def __repr__(self):
         return f"{self.name} (Concentration: {self.conc}, Label: {self.label})"
@@ -173,7 +175,7 @@ class NState:
         for idx, name in enumerate(self.transitions):
             self.transitions[name].index = idx
         
-        self._generate_matrices_for_rates() # generates self._unit_sp_mat, self._stoich_mat, self._stoich_reactant_mat, self._k_vec, self._k_diag
+        self._generate_matrices_for_odes_func() # generates self._unit_sp_mat, self._stoich_mat, self._stoich_reactant_mat, self._k_vec, self._k_diag
 
         sp_syms = {name: symbols(name) for name in self.species}
         tr_syms = {name: symbols(name) for name in self.transitions}
@@ -247,7 +249,7 @@ class NState:
         """
         species_vec = Matrix([sp_syms[name] for name in self.species])
         odes_func = lambdify(species_vec, self.odes_numk, 'numpy')
-        self._odes = lambda t, y: odes_func(*y).flatten()
+        self._odes_func = lambda t, y: odes_func(*y).flatten()
         return
 
     def log_odes(self,force_print=False):
@@ -296,7 +298,7 @@ class NState:
             print(ode_log)
         return
 
-    def _generate_matrices_for_rates(self):
+    def _generate_matrices_for_odes_func(self):
         """
         Generates 
         unit species matrix (self._unit_sp_mat), 
@@ -381,7 +383,7 @@ class NState:
         
         return
 
-    def _odes(self, t, conc):
+    def _odes_func(self, t, conc):
         """
         Cannot model rates that are not simple power laws (eg dynamic inhibition, cooperativity, time dependent params). 
         But most of these can be baked in on the schematic level I think. 
@@ -433,17 +435,10 @@ class NState:
             # needs to be an n-dimensional function, where n is the degree of (non)linearity
         #TODO: smarter way to choose rtol and atol. M-scale kon and nM-scale conc cause wild issues that are resolved with changing rtol and atol from default
             # at least a warning if a weird solution is found 
-        if conc0_dict:
-            combinations = product(*(
-                np.atleast_1d(conc0_dict.get(sp_name, [np.atleast_1d(sp_data.conc).flatten()[0]])) 
-                for sp_name, sp_data in self.species.items()
-            ))
-            conc0_mat = np.vstack([comb for comb in combinations])
-        else:
-            conc0_mat = np.atleast_2d([np.atleast_1d(sp_data.conc).flatten()[0] for _, sp_data in self.species.items()])
+
+        conc0_mat = self._make_conc0_mat(conc0_dict)
         conc0_mat_len = len(conc0_mat)
         self.log.info(f"Solving the timecourse from {conc0_mat_len} initial concentration vectors...")
-        self.conc0_mat = conc0_mat
 
         solns = []
         for conc0 in conc0_mat:
@@ -463,7 +458,7 @@ class NState:
                 else:
                     t_span = (t_eval[0], t_eval[-1])
 
-            soln = solve_ivp(self._odes, t_span=t_span, y0=conc0, method=method, t_eval=t_eval, 
+            soln = solve_ivp(self._odes_func, t_span=t_span, y0=conc0, method=method, t_eval=t_eval, 
                                 rtol=rtol, atol=atol, jac=self.J_func_wrap, dense_output=dense_output) 
                 # vectorized=True makes legacy ode func slower bc low len(conc0) I think
             if not soln.success:
@@ -506,76 +501,17 @@ class NState:
         else:
             self.log.info("Not returning raw solver output. Use output_raw=True to return raw data.\n")
             return
-        
-    def simulate(self, t, output_raw=False):
-        """
-        Simulate the system stochastically using the Gillespie algorithm.
-
-        Args:
-        t (np.array): Time points for desired observations.
-        output_raw (bool): If True, return raw simulation data.
-
-        Returns:
-        Dict or None, depending on output_mode.
-        """
-        #TODO: Although i do like the idea of being able to continue from a previous run, so add an option called "continue" which takes an integer which points to the index of the run that its continuing from
-        #TODO: show pop dist is like odes
-        # Initialize
-        current_time = 0.0
-        conc = np.array([np.atleast_1d(sp.conc)[0] for _, sp in self.species.items()])
-        times = [current_time]
-        concentrations = [conc.copy()]
-        transitions_list = list(self.transitions.values())  # Convert dictionary values to a list for indexing
-
-        # Simulation loop
-        while current_time < t[-1]:
-            rate = np.zeros(len(transitions_list))
-            for tr_idx, tr in enumerate(transitions_list):
-                tr_rate = tr.k * np.prod([conc[self.species[sp_name].index] ** coeff for sp_name,coeff in tr.source])
-                rate[tr_idx] = tr_rate
-
-            total_rate = np.sum(rate)
-            if total_rate == 0:
-                break
-
-            # Time to next event
-            tau = np.random.exponential(1/total_rate)
-            current_time += tau
-            if current_time > t[-1]:
-                break
-
-            # Determine which event occurs
-            cumulative_rate = np.cumsum(rate)
-            event = np.searchsorted(cumulative_rate, np.random.rand() * total_rate)
-
-            # Update concentrations
-            for coeff, sp_name in transitions_list[event].source:
-                conc[self.species[sp_name].index] -= coeff
-            for coeff, sp_name in transitions_list[event].target:
-                conc[self.species[sp_name].index] += coeff
-
-            times.append(current_time)
-            concentrations.append(conc.copy())
-
-        # Interpolate or sample to requested time points
-        interpolated_concs = np.zeros((len(self.species), len(t)))
-        j = 0
-        for i, desired_time in enumerate(t):
-            while j < len(times) - 1 and times[j+1] < desired_time:
-                j += 1
-            interpolated_concs[:, i] = concentrations[j]
-
-        # Logging
-        self.log.info("Stochastic simulation completed successfully.")
-
-        if output_raw:
-            return {'time': np.array(times), 'concentrations': np.array(concentrations)}
+    
+    def _make_conc0_mat(self,conc0_dict=None):
+        if conc0_dict:
+            combinations = product(*(
+                np.atleast_1d(conc0_dict.get(sp_name, [np.atleast_1d(sp_data.conc).flatten()[0]])) 
+                for sp_name, sp_data in self.species.items()
+            ))
+            conc0_mat = np.vstack([comb for comb in combinations])
         else:
-            # Format output to match deterministic function if needed
-            solution = {'time': t, 'concentrations': interpolated_concs}
-            for idx, sp in enumerate(self.species.keys()):
-                self.species[sp].conc = solution['concentrations'][idx]
-            return solution
+            conc0_mat = np.atleast_2d([np.atleast_1d(sp_data.conc).flatten()[0] for _, sp_data in self.species.items()])
+        return conc0_mat
 
     def sum_conc(self,whitelist:list=None,blacklist:list=None):
         """
@@ -614,5 +550,75 @@ class NState:
         return
 
 
+
+        #TODO: Although i do like the idea of being able to continue from a previous run, so add an option called "continue" which takes an integer which points to the index of the run that its continuing from
+        #TODO: show pop dist is like odes
+        # Initialize
+        #TODO: S2.alt1 breaks this from negative rates somehow
+    #TODO: running prob? and test more
+    def simulate(self, t_max, conc0_dict=None, num_replicates=1, output_times=None, output_raw=False):
+        conc0_mat = self._make_conc0_mat(conc0_dict)
+        results = [self._simulate_replicates(t_max, conc0, num_replicates, output_times) for conc0 in conc0_mat]
+        return self._process_results(results, output_raw)
+
+    def _simulate_replicates(self, t_max, conc0, num_replicates, output_times):
+        replicates = [self._run_single_replicate(t_max, conc0, output_times) for _ in range(num_replicates)]
+        return self._aggregate_replicate_data(replicates)
+
+    def _run_single_replicate(self, t_max, conc0, output_times):
+        times, states = [0], [conc0]
+        while times[-1] < t_max:
+            rates, transitions = self._calculate_transition_rates(states[-1])
+            total_rate = np.sum(rates)
+            if total_rate == 0: break
+            time_step = np.random.exponential(1/total_rate)
+            if (new_time := times[-1] + time_step) > t_max: break
+            times.append(new_time)
+            states.append(self._apply_transition(states[-1], transitions[np.random.choice(len(transitions), p=rates/total_rate)]))
+        return {'t': np.array(times), 'state': np.array(states)}
+
+    def _aggregate_replicate_data(self, replicates):
+        t_all = np.concatenate([rep['t'] for rep in replicates])
+        t_edges = np.unique(t_all)
+        prob_dist = np.mean([self._collect_states_at_times(rep['t'], rep['state'], t_edges) for rep in replicates], axis=0)
+        return {'t': t_edges, 'prob_dist': prob_dist}
+
+
+    def _collect_states_at_times(self, times, states, output_times):
+        idxs = np.searchsorted(times, output_times, side='right') - 1
+        idxs[idxs < 0] = 0
+        return states[idxs]
+
+    def _process_results(self, results, output_raw):
+        if len(results) == 1:
+            result = results[0]
+            self.t_sim = result['t']
+            self.prob_dist = result['prob_dist']
+            for sp_name, sp_data in self.species.items():
+                sp_data.prob = self.prob_dist[:, sp_data.index]
+            return result if output_raw else None
+        else:
+            # Handle multiple initial conditions
+            self.t_sim = [result['t'] for result in results]
+            self.prob_dist = [result['prob_dist'] for result in results]
+            for idx, result in enumerate(results):
+                for sp_name, sp_data in self.species.items():
+                    sp_data.prob = result['prob_dist'][:, sp_data.index]
+            return results if output_raw else None
+
+    def _calculate_transition_rates(self, state):
+        rates, transitions = [], []
+        for tr_name, tr in self.transitions.items():
+            rate = tr.k * np.prod([state[self.species[sp_name].index] ** coeff for sp_name, coeff in tr.source])
+            rates.append(rate)
+            transitions.append((tr.source, tr.target))
+        return np.array(rates), transitions
+
+    def _apply_transition(self, current_state, transition):
+        new_state = np.array(current_state)
+        for sp_name, coeff in transition[0]: new_state[self.species[sp_name].index] -= coeff
+        for sp_name, coeff in transition[1]: new_state[self.species[sp_name].index] += coeff
+        return new_state
+                
 
 

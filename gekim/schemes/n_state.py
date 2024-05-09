@@ -6,6 +6,9 @@ from scipy.integrate import solve_ivp
 from itertools import product
 from sympy import symbols, Matrix, prod, pretty, zeros, lambdify
 from ..utils import integerable_float,Logger
+from ..simulators.gillespie import Gillespie
+from ..simulators.simulator import Simulator
+from typing import Callable, Any
 
 
 #TODO: find_linear_paths in kinetics2 and more general pathfinder in utils?
@@ -119,6 +122,8 @@ class Transition:
 class NState:
     #TODO: Add stochastic method
     #TODO: add_species and add_transition methods
+    #TODO: markovian, nonmarkovian, etc
+    #TODO: config conc to conc0, .conc to .soln, .prob to .conc
     
     def __init__(self, config: dict, logfilename=None, quiet=False):
         """
@@ -185,7 +190,7 @@ class NState:
         self.log_odes()
         tr_sym2num = {symbols(name): tr.k for name, tr in self.transitions.items()}
         self.odes_numk = self.odes_sym.subs(tr_sym2num)
-        self._lambdify_sym_odes(sp_syms) # Overwrites self._ode with a lambdified version of self.odes_sym
+        #self._lambdify_sym_odes(sp_syms) # Overwrites self._ode with a lambdified version of self.odes_sym
         self.t_odes = None 
 
         # Jacobian
@@ -556,38 +561,8 @@ class NState:
         # Initialize
         #TODO: S2.alt1 breaks this from negative rates somehow
     #TODO: running prob? and test more
-    def simulate(self, t_max, conc0_dict=None, num_replicates=1, output_times=None, output_raw=False):
-        conc0_mat = self._make_conc0_mat(conc0_dict)
-        results = [self._simulate_replicates(t_max, conc0, num_replicates, output_times) for conc0 in conc0_mat]
-        return self._process_results(results, output_raw)
-
-    def _simulate_replicates(self, t_max, conc0, num_replicates, output_times):
-        replicates = [self._run_single_replicate(t_max, conc0, output_times) for _ in range(num_replicates)]
-        return self._aggregate_replicate_data(replicates)
-
-    def _run_single_replicate(self, t_max, conc0, output_times):
-        times, states = [0], [conc0]
-        while times[-1] < t_max:
-            rates, transitions = self._calculate_transition_rates(states[-1])
-            total_rate = np.sum(rates)
-            if total_rate == 0: break
-            time_step = np.random.exponential(1/total_rate)
-            if (new_time := times[-1] + time_step) > t_max: break
-            times.append(new_time)
-            states.append(self._apply_transition(states[-1], transitions[np.random.choice(len(transitions), p=rates/total_rate)]))
-        return {'t': np.array(times), 'state': np.array(states)}
-
-    def _aggregate_replicate_data(self, replicates):
-        t_all = np.concatenate([rep['t'] for rep in replicates])
-        t_edges = np.unique(t_all)
-        prob_dist = np.mean([self._collect_states_at_times(rep['t'], rep['state'], t_edges) for rep in replicates], axis=0)
-        return {'t': t_edges, 'prob_dist': prob_dist}
-
-
-    def _collect_states_at_times(self, times, states, output_times):
-        idxs = np.searchsorted(times, output_times, side='right') - 1
-        idxs[idxs < 0] = 0
-        return states[idxs]
+    #TODO: type hints on algo
+    #TODO: 2S I goes neg
 
     def _process_results(self, results, output_raw):
         if len(results) == 1:
@@ -606,19 +581,13 @@ class NState:
                     sp_data.prob = result['prob_dist'][:, sp_data.index]
             return results if output_raw else None
 
-    def _calculate_transition_rates(self, state):
-        rates, transitions = [], []
-        for tr_name, tr in self.transitions.items():
-            rate = tr.k * np.prod([state[self.species[sp_name].index] ** coeff for sp_name, coeff in tr.source])
-            rates.append(rate)
-            transitions.append((tr.source, tr.target))
-        return np.array(rates), transitions
-
-    def _apply_transition(self, current_state, transition):
-        new_state = np.array(current_state)
-        for sp_name, coeff in transition[0]: new_state[self.species[sp_name].index] -= coeff
-        for sp_name, coeff in transition[1]: new_state[self.species[sp_name].index] += coeff
-        return new_state
+    
+    def simulate(self, t_max, conc0_dict=None, num_replicates=1, output_times=None, output_raw=False, simulator: Simulator = Gillespie,**kwargs):
+        if not isinstance(simulator, Simulator):
+            simulator = simulator(self)  # Instantiate if the argument passed is a class, not an instance
+        conc0_mat = self._make_conc0_mat(conc0_dict)
+        results = [simulator.simulate(t_max, conc0, num_replicates, output_times,**kwargs) for conc0 in conc0_mat]
+        return self._process_results(results, output_raw)
                 
 
 

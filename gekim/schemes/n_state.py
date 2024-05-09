@@ -29,6 +29,7 @@ class Species:
         self.index = index
         self.color = color
         self.dcdt = dcdt
+        self.sym = symbols(name)
 
     def __repr__(self):
         return f"{self.name} (Concentration: {self.conc}, Label: {self.label})"
@@ -52,6 +53,7 @@ class Transition:
         self.target = Transition._format_transition(target,"target")  # List of (SPECIES, COEFF) tuples or "{COEFF}{SPECIES}" strings
         self.label = label or name
         self.index = index
+        self.sym = symbols(name)
         
 
     def __repr__(self):
@@ -181,7 +183,7 @@ class NState:
         self.log_dcdts()
         tr_sym2num = {symbols(name): tr.k for name, tr in self.transitions.items()}
         self.dcdts_numk = self.dcdts_sym.subs(tr_sym2num)
-        # self._lambdify_sym_dcdts(sp_syms) # Overwrites self._dcdt with a lambdified version of self.dcdts_sym
+        self._lambdify_sym_dcdts(sp_syms) # Overwrites self._dcdt with a lambdified version of self.dcdts_sym
         self.t_dcdts = None 
 
         # Jacobian
@@ -297,10 +299,10 @@ class NState:
     def _generate_matrices_for_rates(self):
         """
         Generates 
-            unit species matrix (self._unit_sp_mat), 
-            stoichiometry matrix (self._stoich_mat), 
-            stoichiometry reactant matrix (self._stoich_reactant_mat), and 
-            rate constant vector (self._k_vec) and diagonal matrix (self._k_diag).
+        unit species matrix (self._unit_sp_mat), 
+        stoichiometry matrix (self._stoich_mat), 
+        stoichiometry reactant matrix (self._stoich_reactant_mat), and 
+        rate constant vector (self._k_vec) and diagonal matrix (self._k_diag).
 
         Rows are transitions, columns are species.
 

@@ -25,7 +25,14 @@ class Simulator(ABC):
         return np.array(rates), transitions
 
     def _apply_transition(self, current_state, transition):
+        #TODO: fails from stoich maybe. like for 2I
         new_state = np.array(current_state)
-        for sp_name, coeff in transition[0]: new_state[self.scheme.species[sp_name].index] -= coeff
-        for sp_name, coeff in transition[1]: new_state[self.scheme.species[sp_name].index] += coeff
+        # Calculate the maximum possible multiplier for the transition coefficients without causing negative concentrations
+        max_multiplier = min(new_state[self.scheme.species[sp_name].index] / coeff 
+                            for sp_name, coeff in transition[0] if coeff > 0)
+        # Apply the transition
+        for sp_name, coeff in transition[0]: 
+            new_state[self.scheme.species[sp_name].index] -= coeff
+        for sp_name, coeff in transition[1]: 
+            new_state[self.scheme.species[sp_name].index] += coeff
         return new_state

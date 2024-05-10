@@ -8,13 +8,13 @@ from sympy import symbols, Matrix, prod, pretty, zeros, lambdify
 from ..utils import integerable_float,Logger
 from ..simulators.gillespie import Gillespie
 from ..simulators.simulator import Simulator
-from typing import Callable, Any
+from typing import Callable, Any, Union
 
 
 #TODO: find_linear_paths in kinetics2 and more general pathfinder in utils?
     
 class Species:
-    def __init__(self, name: str, conc: np.ndarray|float, label=None, color=None, index=None, ode=None):
+    def __init__(self, name: str, conc: Union[np.ndarray,float], label=None, color=None, index=None, ode=None):
         """
         Recommended to initialize with the following arguments:
         name (str): Name of the species.

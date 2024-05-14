@@ -130,6 +130,7 @@ class NState:
     def __init__(self, config: dict, logfilename=None, quiet=False):
         """
         Initialize the NState class with configuration data.
+        Only Markovian is supported so far.
 
         Args:
         config (dict): Configuration containing species and transitions.

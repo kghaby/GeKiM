@@ -4,7 +4,7 @@ from .simulator import Simulator
 class Gillespie(Simulator):
     """
     Gillespie's algorithm for stochastic simulation. Handles non-linear kinetics and complex stoichiometry.
-    Does not work if any transitions are > (pseudo-)first order. 
+    Does not work if any transitions are > (pseudo-)first order.  
     """
 
     def simulate(self, t_max, conc0, num_replicates, output_times, max_iter=1000):

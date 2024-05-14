@@ -1,6 +1,6 @@
 import numpy as np
 from scipy.optimize import curve_fit
-from ..utils import _update_dict_with_subset
+from ..utils.helpers import _update_dict_with_subset
 from . import fitting
 
 # TODO: fit to scheme. meaning yuo make a scheme without values for the transitions and fit it to occ data to see what values of rates satisfy curve

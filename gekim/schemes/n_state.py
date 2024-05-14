@@ -36,7 +36,7 @@ class Species:
         self.color = color
         self.rate = rate
         self.sym = symbols(name)
-        self.conc = None # added by simulate
+        self.sim= None # added by simulate
 
     def __repr__(self):
         return f"{self.name} (Initial Concentration: {self.conc0}, Label: {self.label})"
@@ -125,12 +125,12 @@ class NState:
     #TODO: Add stochastic method
     #TODO: add_species and add_transition methods
     #TODO: markovian, nonmarkovian, etc
-    #TODO: config conc to conc0, .conc to .soln, .prob to .conc
+    #TODO: is_linear() or get degree of linearity. will loops show up as a degree?
     
     def __init__(self, config: dict, logfilename=None, quiet=False):
         """
-        Initialize the NState class with configuration data.
-        
+        Initialize the NState class with configuration data. Can be any degree of nonlinearity.
+
         Args:
         config (dict): Configuration containing species and transitions.
                        Species should contain name, initial concentration, and label.
@@ -405,7 +405,7 @@ class NState:
                     output_raw=False, dense_output=False):
         """
         Solve the differential equations of species concentration wrt time for the system. 
-        Will update self.species.conc with the respective solutions.
+        Will update self.species.soln with the respective solutions.
 
         Arguments:
         t_eval (np.array): Time points for rate solutions.
@@ -471,7 +471,7 @@ class NState:
             self.log.info(f"\tTime saved to self.t_soln (np.array)")
             for _, data in self.species.items():
                 data.soln = soln.y[data.index]
-            self.log.info(f"\tConcentrations saved respectively to self.species[sp_name].conc (np.array)")
+            self.log.info(f"\tConcentrations saved respectively to self.species[sp_name].soln (np.array)")
             if dense_output:
                 self.soln_continuous = soln.sol
                 self.log.info(f"\tSaving continuous solution function to self.soln_continuous(t) (scipy.integrate.ODESolution)")
@@ -483,7 +483,7 @@ class NState:
             self.log.info(f"\t{conc0_mat_len} time vectors saved to self.t_soln (list of np.arrays)")
             for _, data in self.species.items():
                 data.soln = [soln.y[data.index] for soln in solns]
-            self.log.info(f"\t{conc0_mat_len} concentration vectors saved respectively to self.species[sp_name].conc (list of np.arrays)")
+            self.log.info(f"\t{conc0_mat_len} concentration vectors saved respectively to self.species[sp_name].soln (list of np.arrays)")
             if dense_output:
                 self.soln_continuous = [soln.sol for soln in solns] 
                 self.log.info(f"\tSaving list of continuous solution functions to self.soln_continuous (list of scipy.integrate.ODESolution's)")
@@ -535,16 +535,15 @@ class NState:
 
         return total_concentration
 
-    def conc_mat2dict(self,conc_mat):
+    def soln_mat2dict(self,matrix):
         """
-        Save species vectors from a concentration matrix to the respective species[NAME].conc based on species[NAME].index.
+        Save species vectors from a concentration matrix to the respective species[NAME].soln based on species[NAME].index.
         Useful for saving the output of a continuous solution to the species dictionary.
             Don't forget `system.t_soln = t`
         """
         for _, sp_data in self.species.items():
-            sp_data.conc0 = conc_mat[sp_data.index]
+            sp_data.soln = matrix[sp_data.index]
         return
-
 
 
         #TODO: Although i do like the idea of being able to continue from a previous run, so add an option called "continue" which takes an integer which points to the index of the run that its continuing from
@@ -561,7 +560,7 @@ class NState:
             self.t_sim = result['t']
             self.prob_dist = result['prob_dist']
             for sp_name, sp_data in self.species.items():
-                sp_data.conc = self.prob_dist[:, sp_data.index]
+                sp_data.sim= self.prob_dist[:, sp_data.index]
             return result if output_raw else None
         else:
             # Handle multiple initial conditions
@@ -569,7 +568,7 @@ class NState:
             self.prob_dist = [result['prob_dist'] for result in results]
             for idx, result in enumerate(results):
                 for sp_name, sp_data in self.species.items():
-                    sp_data.conc = result['prob_dist'][:, sp_data.index]
+                    sp_data.sim= result['prob_dist'][:, sp_data.index]
             return results if output_raw else None
 
     

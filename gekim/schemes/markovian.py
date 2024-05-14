@@ -121,11 +121,10 @@ class Transition:
         tr = [(name, coeff) for name, coeff in parsed_species.items()]
         return tr
 
-class NState:
+class Markovian:
     #TODO: Add stochastic method
     #TODO: add_species and add_transition methods
     #TODO: markovian, nonmarkovian, etc
-    #TODO: config conc to conc0, .conc to .soln, .prob to .conc
     
     def __init__(self, config: dict, logfilename=None, quiet=False):
         """
@@ -484,7 +483,7 @@ class NState:
             self.log.info(f"\t{conc0_mat_len} time vectors saved to self.t_soln (list of np.arrays)")
             for _, data in self.species.items():
                 data.soln = [soln.y[data.index] for soln in solns]
-            self.log.info(f"\t{conc0_mat_len} concentration vectors saved respectively to self.species[sp_name].conc (list of np.arrays)")
+            self.log.info(f"\t{conc0_mat_len} concentration vectors saved respectively to self.species[sp_name].soln (list of np.arrays)")
             if dense_output:
                 self.soln_continuous = [soln.sol for soln in solns] 
                 self.log.info(f"\tSaving list of continuous solution functions to self.soln_continuous (list of scipy.integrate.ODESolution's)")

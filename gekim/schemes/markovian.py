@@ -128,8 +128,7 @@ class Markovian:
     
     def __init__(self, config: dict, logfilename=None, quiet=False):
         """
-        Initialize the NState class with configuration data.
-        Only Markovian is supported so far.
+        Initialize the Markovian class with configuration data for an n-state scheme.
 
         Args:
         config (dict): Configuration containing species and transitions.

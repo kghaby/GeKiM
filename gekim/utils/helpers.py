@@ -3,15 +3,28 @@ import math
 
 #TODO: pathfinder that counts and lists all possible paths between two species
 
-def rate_pair_from_P(intOOM,Pf):
+def rate_pair_from_P(int_OOM,P_B) -> tuple:
     """
-    Provides rates between two states that are at rapid equilibrium and therefore approximated by the population distribution. 
-    intOOM is the order of magnitude of the rates.
-    Pf is the probability of the forward state, ie kf/(kf+kb) or [B]/([A]+[B]) for A<-->B.
+    Provides rates between two states that are at rapid equilibrium and 
+        therefore approximated by the population distribution. 
+
+    Parameters:
+    ----------
+    int_OOM : int or float
+        The order of magnitude of the rates.
+    P_B : float
+        The probability of the state B, i.e., kAB/(kBA+kAB) or [B]/([A]+[B]) for A<-->B.
+
+    Returns:
+    -------
+    kAB : float
+        The rate constant from A to B.
+    kBA : float
+        The rate constant from B to A.
     """
-    kf=Pf*10**(float(intOOM)+1)
-    kb=10**(float(intOOM)+1)-kf
-    return kf,kb
+    kAB=P_B*10**(float(int_OOM)+1)
+    kBA=10**(float(int_OOM)+1)-kAB
+    return kAB,kBA
 
 def integerable_float(num):
     """
@@ -25,7 +38,22 @@ def integerable_float(num):
 def round_sig(num, sig_figs, autoformat=True):
     """
     Round up using significant figures.
-    autoformat = True (default) formats into scientific notation if the order of magnitude more than +/- 3.
+
+    Parameters:
+    ----------
+    num : float
+        The number to be rounded.
+    sig_figs : int
+        The number of significant figures to round to.
+    autoformat : bool, optional
+        If True (default), formats the result into scientific notation if the order of magnitude 
+        is greater than +/- 3.
+
+    Returns:
+    -------
+    float or str
+        The rounded number. If autoformat is True and the result is in scientific notation, 
+        it is returned as a string.
     """
     if num == 0:
         return 0.0
@@ -44,30 +72,55 @@ def round_sig(num, sig_figs, autoformat=True):
     else:
         return result
 
-def _update_dict_with_subset(defaults: dict, updates: dict):
+def update_dict_with_subset(defaults: dict, updates: dict):
     """
     Recursively updates the default dictionary with values from the update dictionary,
     ensuring that only the keys present in the defaults are updated.
 
-    Args:
-    defaults: The default dictionary containing all allowed keys with their default values.
-    updates: The update dictionary containing keys to update in the defaults dictionary.
+    Parameters
+    ----------
+    defaults : dict
+        The default dictionary containing all allowed keys with their default values.
+    updates : dict
+        The update dictionary containing keys to update in the defaults dictionary.
 
-    Returns:
-    dict: The updated dictionary.
+    Returns
+    -------
+    dict
+        The updated dictionary.
     """
 
     for key, update_value in updates.items():
         if key in defaults:
             # If both the default and update values are dictionaries, recurse
             if isinstance(defaults[key], dict) and isinstance(update_value, dict):
-                defaults[key] = _update_dict_with_subset(defaults[key], update_value)
+                defaults[key] = update_dict_with_subset(defaults[key], update_value)
             else:
                 defaults[key] = update_value
 
     return defaults
 
 def compare_dictionaries(dict1, dict2, rel_tol=1e-9, abs_tol=0.0):
+    """
+    Compare two dictionaries recursively and check if their values are approximately equal.
+
+    Parameters
+    ----------
+    dict1 : dict
+        The first dictionary to compare.
+    dict2 : dict
+        The second dictionary to compare.
+    rel_tol : float, optional
+        The relative tolerance for comparing floating-point values. Default is 1e-9.
+    abs_tol : float, optional
+        The absolute tolerance for comparing floating-point values. Default is 0.0.
+
+    Returns
+    -------
+    bool
+        True if the dictionaries are approximately equal, False otherwise.
+    """
+    
     if dict1.keys() != dict2.keys():
         return False
 

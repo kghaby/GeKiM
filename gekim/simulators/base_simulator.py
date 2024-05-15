@@ -6,6 +6,21 @@ from ..schemes.n_state import NState
 
 class BaseSimulator(ABC):
     def __init__(self, system: NState):
+        """
+        Initialize the simulator.
+
+        Parameters
+        ----------
+        system : NState
+            The system object. 
+
+        Notes
+        -----
+        The input NState instance, `system`, will be modified directly 
+            by the simulator, whether the simulator is added as an attribute to `system` or not.
+            
+        Initializes the `simin` and `simout` dictionaries of system, species, and transitions objects.
+        """
         self.system = weakref.proxy(system)
 
         self.system.simin = {}
@@ -36,6 +51,9 @@ class BaseSimulator(ABC):
         pass
 
     def _make_y0_mat(self):
+        """
+        Create a matrix of initial conditions for the system.
+        """
         combinations = product(*(
             np.atleast_1d(np.atleast_1d(sp_data.y0).flatten())
             for _, sp_data in self.system.species.items()

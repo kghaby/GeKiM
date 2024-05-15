@@ -21,7 +21,7 @@ class Species:
                 Name of the species.
             y0 : Union[np.ndarray, float]
                 Initial concentration of the species.
-                Array Example: {"Ligand":np.linspace(1,1500,100)} for a Michaelis-Menten ligand concentration scan.
+                Array Example: `{"Ligand":np.linspace(1,1500,100)}` for a Michaelis-Menten ligand concentration scan.
             label : str, optional
                 Useful for plotting. Will default to NAME.
             color : str, optional
@@ -242,7 +242,8 @@ class NState:
         Parameters
         ----------
         simulator : class
-            The simulator class to use for the system. Unless using a custom simulator, use the provided simulators in gekim.simulators.
+            The simulator class to use for the system. Unless using a custom simulator, 
+            use the provided simulators in gekim.simulators.
         *args : tuple, optional
             Additional arguments to pass to the simulator.
         **kwargs : dict, optional
@@ -276,7 +277,8 @@ class NState:
         Returns
         -------
         numpy.ndarray or None
-            The sum of the simulated values. Returns None if the simulated data is not found for any species.
+            The sum of the simulated values. Returns None if the 
+            simulated data is not found for any species.
 
         Raises
         ------
@@ -303,9 +305,9 @@ class NState:
 
     def mat2sp_simout(self,matrix,key_name="y"):
         """
-        Save species vectors from a concentration matrix to the respective species[NAME].simout[key_name] dict based on species[NAME].index.
+        Save species vectors from a concentration matrix to the respective 
+        `species[NAME].simout[key_name]` dict based on `species[NAME].index`.
         
-
         Parameters
         ----------
         matrix : numpy.ndarray

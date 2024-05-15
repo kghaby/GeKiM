@@ -11,9 +11,17 @@ class Parameters:
         """
         Kd (i.e. dissociation constant) calculation
         
-        Args:
-            kon: on-rate constant (nM^-1*s^-1)
-            koff: off-rate constant (s^-1)
+        Parameters
+        ----------
+        kon : float
+            On-rate constant (CONC^-1*TIME^-1)
+        koff : float
+            Off-rate constant (TIME^-1)
+        
+        Returns
+        -------
+        float
+            The calculated dissociation constant (Kd)
         """
         return koff / kon
     
@@ -22,21 +30,38 @@ class Parameters:
         """
         Keq (i.e. equilibrium constant) calculation
         
-        Args:
-            kon: on-rate constant (nM^-1*s^-1)
-            koff: off-rate constant (s^-1)
+        Parameters
+        ----------
+        kon : float
+            On-rate constant (CONC^-1*TIME^-1)
+        koff : float
+            Off-rate constant (TIME^-1)
+        
+        Returns
+        -------
+        float
+            The calculated equilibrium constant (Keq)
         """
         return kon / koff
 
     @staticmethod
     def KM(kon, koff, kcat):
         """
-        KM (i.e. Michaelis-Menten constant, KA, Khalf, KD) calculation.
+        KM (i.e. Michaelis-Menten constant, KA, Khalf, KD (not to be confused with Kd)) calculation.
         
-        Args:
-            kon: on-rate constant (nM^-1*s^-1)
-            koff: off-rate constant (s^-1) 
-            kcat: irrev catalysis rate constant
+        Parameters
+        ----------
+        kon : float
+            On-rate constant (CONC^-1*TIME^-1)
+        koff : float
+            Off-rate constant (TIME^-1)
+        kcat : float
+            Irreversible catalysis rate constant
+        
+        Returns
+        -------
+        float
+            The calculated Michaelis-Menten constant (KM)
         """
         return (koff + kcat) / kon
     

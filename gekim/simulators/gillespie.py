@@ -11,7 +11,7 @@ from .base_simulator import BaseSimulator
 
 class Gillespie(BaseSimulator):
     """
-    Gillespie's algorithm for stochastic simulation. Handles non-linear kinetics and complex stoichiometry.
+    Gillespie's algorithm for stochastic simulation.
     Does not work if any transitions are > (pseudo-)first order.  
     """
     def setup(self):
@@ -32,9 +32,25 @@ class Gillespie(BaseSimulator):
     
     def simulate(self, t_max, num_replicates=1, output_times=None, output_raw=False,**kwargs):
         """
-        Run a Gillespie simulation.
+        Run a Gillespie simulation on the system.
         
-        Args:
+        Parameters:
+        ----------
+        t_max : float
+            The maximum time to simulate.
+        num_replicates : int, optional
+            The number of replicates to run. Default is 1.
+        output_times : array-like, optional
+            The times at which to output the state of the system. Default is None.
+        output_raw : bool, optional
+            Whether to return the raw simulation output. Default is False.
+        **kwargs : dict, optional
+            Additional keyword arguments to pass to the simulation.
+
+        Returns:
+        -------
+        dict or list of dict
+            The simulation output. If `output_raw` is True, returns a dictionary or a list of dictionaries containing the simulation output for each replicate. If `output_raw` is False, returns None.
 
         """
         y0_mat = self._make_y0_mat()
@@ -93,7 +109,6 @@ class Gillespie(BaseSimulator):
 
     def _apply_transition(self, current_state, transition):
         new_state = np.array(current_state)
-        # Apply the transition
         for sp_name, coeff in transition.source:
             new_state[self.system.species[sp_name].index] -= coeff
         for sp_name, coeff in transition.target:

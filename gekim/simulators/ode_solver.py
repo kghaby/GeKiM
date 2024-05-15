@@ -1,26 +1,52 @@
 import numpy as np
-from sympy import symbols, Matrix, prod, pretty, zeros, lambdify
 from scipy.integrate import solve_ivp
+from sympy import symbols, Matrix, prod, pretty, zeros, lambdify
 from .base_simulator import BaseSimulator
 
 class ODESolver(BaseSimulator):
     """
-    Use as a simulator for NState class. Will generate and solve systems deterministically.
-    Enters the following keys into the self.system.simin dictionary:
-    - unit_sp_mat           : unit species matrix
-    - stoich_mat            : stoichiometry matrix
-    - stoich_reactant_mat   : stoichiometry reactant matrix
-    - k_vec                 : rate constant vector
-    - k_diag                : diagonal matrix of rate constants
-    - rates_sym             : species rate vectors with symbolic species and rate constants
-    - rates_numk            : species rate vector with symbolic species and numerical rate constants
-    - J_sym                 : Jacobian matrix with symbolic species and rate constants
-    - J_symsp_numtr         : Jacobian matrix with symbolic species and numerical rate constants
-    - J_func_wrap           : wrapped numerical Jacobian function that accepts t,y as arguments
+    Parameters
+    ----------
+    system : NState
+        The system object.
 
+    Notes
+    -----
+    The input NState instance, `system`, will be modified directly by the simulator, 
+    whether the simulator is added as an attribute to `system` or not. 
+
+    Use as a simulator for NState class. Will generate and solve systems deterministically.
+
+    During initialization, the following keys (and values) are added to the 
+    `self.system.simin` dict:
+
+        unit_sp_mat : np.ndarray
+            Unit species matrix.
+        stoich_mat : np.ndarray
+            Stoichiometry matrix.
+        stoich_reactant_mat : np.ndarray
+            Stoichiometry reactant matrix.
+        k_vec : np.ndarray
+            Rate constant vector.
+        k_diag : np.ndarray
+            Diagonal matrix of rate constants.
+        rates_sym : sympy.Matrix
+            Species rate vectors with symbolic species and rate constants.
+        rates_numk : sympy.Matrix
+            Species rate vector with symbolic species and numerical rate constants.
+        J_sym : sympy.Matrix
+            Jacobian matrix with symbolic species and rate constants.
+        J_symsp_numtr : sympy.Matrix
+            Jacobian matrix with symbolic species and numerical rate constants.
+        J_func_wrap : Callable
+            Wrapped numerical Jacobian function that accepts t, y as arguments.
     """
+
     def setup(self):
-        
+        """
+        (Re)initialize the simulator by generating the necessary matrices and symbolic expressions, 
+        and saving them to the system and species simin dictionaries.
+        """
         self._generate_matrices_for_rates_func() 
 
         sp_syms = {name: symbols(name) for name in self.system.species}
@@ -37,11 +63,14 @@ class ODESolver(BaseSimulator):
 
     def _generate_matrices_for_rates_func(self):
         """
+        Notes
+        -----
         Generates 
-        - unit species matrix (self.system.simin["unit_sp_mat"]), 
-        - stoichiometry matrix (self.system.simin["stoich_mat"]), 
-        - stoichiometry reactant matrix (self.system.simin["stoich_reactant_mat"]), and 
-        - rate constant vector (self.system.simin["k_vec"]) and diagonal matrix (self.system.simin["k_diag"]).
+        - unit species matrix (`self.system.simin["unit_sp_mat"]`), 
+        - stoichiometry matrix (`self.system.simin["stoich_mat"]`), 
+        - stoichiometry reactant matrix (`self.system.simin["stoich_reactant_mat"]`), and 
+        - rate constant vector (`self.system.simin["k_vec"]`) 
+            and diagonal matrix (`self.system.simin["k_diag"]`).
 
         Rows are transitions, columns are species.
 
@@ -74,6 +103,10 @@ class ODESolver(BaseSimulator):
     
     def _rates_func(self, t, conc):
         """
+        Calculate the rate vector at time t and concentration vector conc.
+
+        Notes
+        -----
         Cannot model rates that are not simple power laws (eg dynamic inhibition, cooperativity, time dependent params). 
         But most of these can be baked in on the schematic level I think. 
         """
@@ -85,6 +118,8 @@ class ODESolver(BaseSimulator):
     
     def _generate_rates_sym(self,sp_syms,tr_syms):
         """
+        Notes
+        -----
         Generates 
         - Species rate vectors with symbolic species and rate constants 
         - Species rate vectors with symbolic species and numerical rate constants
@@ -117,6 +152,9 @@ class ODESolver(BaseSimulator):
     def _lambdify_sym_rates(self,sp_syms):
         """
         Convert the symbolic rate vector (with numerical rate constants) into a numerical function.
+
+        Notes
+        -----
         This overwrites the native self._rate function. It's just as fast typically, if not a little faster.
         Not currently utilized, but this might be useful someday.
         """
@@ -127,7 +165,12 @@ class ODESolver(BaseSimulator):
 
     def log_rates(self,force_print=False):
         """
-        Log the symbolic rates.
+        Log the symbolic rates using the system's logger.
+
+        Parameters
+        ----------
+        force_print : bool, optional
+            If True, the rates will be printed to the console. Default is False.
         """
         rate_dict = {}
         max_header_length = 0
@@ -175,6 +218,8 @@ class ODESolver(BaseSimulator):
 
     def _generate_jac(self,sp_syms):
         """
+        Notes
+        -----
         Generates
          - the Jacobian matrix with symbolic species and rate constants (self.system.simin["J_sym"])
          - the Jacobian matrix with symbolic species and numerical rate constants (self.system.simin["J_symsp_numtr"])
@@ -182,8 +227,8 @@ class ODESolver(BaseSimulator):
 
         The wrapped numerical function is time-independent even though it accepts t as an argument!
 
-        The Jacobian matrix here represents the first-order partial derivatives of the rate of change equations
-        for each species with respect to all other species in the system.
+        The Jacobian matrix here represents the first-order partial derivatives of the rate of 
+            change equations for each species with respect to all other species in the system.
         """
         
         species_vec = Matrix(list(sp_syms.values()))
@@ -199,11 +244,14 @@ class ODESolver(BaseSimulator):
       
     def log_jac(self,force_print=False):
         """
-        Log the symbolic representation of the Jacobian matrix.
-        The logged Jacobian includes row and column labels, but self.system.simin["J_sym"] does not.
+        Log the symbolic representation of the Jacobian matrix using the system's logger.
 
-        The Jacobian matrix here represents the first-order partial derivatives of the rate of change equations
-        for each species with respect to all other species in the system.
+        Notes
+        -----
+        The logged Jacobian includes row and column labels, but `SYSTEM.simin["J_sym"]` does not.
+
+        The Jacobian matrix here represents the first-order partial derivatives of the rate of 
+            change equations for each species with respect to all other species in the system.
         """
         n_species = len(self.system.species)
         J_log = zeros(n_species + 1, n_species + 1)
@@ -225,27 +273,44 @@ class ODESolver(BaseSimulator):
     def simulate(self, t_eval: np.ndarray = None, t_span: tuple = None, method='BDF', rtol=1e-6, atol=1e-8, dense_output=False, output_raw=False, **kwargs):
         """
         Solve the differential equations of species concentration wrt time for the system. 
-        Will update self.species.soln with the respective solutions.
 
-        Arguments:
-        - output_raw: If True, return raw solver output.
-        - t_eval: Time points for rate solutions.
-        - t_span: Time span for rate solutions.
-        - method: Integration method, default is 'BDF'.
-        - rtol: Relative tolerance for the solver. Default is 1e-6
-        - atol: Absolute tolerance for the solver. Default is 1e-8
-        - dense_output: If True, save a scipy.integrate.ODESolution instance to self.soln_continuous(t)
-            If using multiple y0's, this will be a list of functions that share indexing with the other outputs,
-                and can be called like `SYSTEM.simout['soln_continuous'][idx](t)`.
-            Access a specific species conc like soln_continuous(t)[self.species[NAME].index].
-        - kwargs: Additional keyword arguments to pass to the solver.
+        Parameters
+        ----------
+        output_raw : bool, optional
+            If True, return raw solver output.
+        t_eval : np.ndarray, optional
+            Time points for rate solutions.
+        t_span : tuple, optional
+            Time span for rate solutions.
+        method : str, optional
+            Integration method, default is 'BDF'.
+        rtol : float, optional
+            Relative tolerance for the solver. Default is 1e-6.
+        atol : float, optional
+            Absolute tolerance for the solver. Default is 1e-8.
+        dense_output : bool, optional
+            If True, save a `scipy.integrate._ivp.common.OdeSolution` instance to `SYSTEM.simout.soln_continuous(t)`.
+            If using multiple y0's, this will be a list of instances that share indexing with the other outputs,
+            and can be called like `SYSTEM.simout['soln_continuous'][idx](t)`.
+            Access a specific species conc like `soln_continuous(t)[SYSTEM.species[NAME].index]`.
+        **kwargs : dict, optional
+            Additional keyword arguments to pass to the solver.
 
-        Saves the following keys to SYSTEM.simout:
-        - t: Time points
-        - soln_continuous: Continuous solution function (if dense_output=True)
+        Notes
+        -----
+        Saves the following keys to `SYSTEM.simout`:
+        - t : np.ndarray
+            Time points
+        - soln_continuous : scipy.integrate._ivp.common.OdeSolution or list of scipy.integrate._ivp.common.OdeSolution
+            Continuous solution function (if `dense_output=True`)
 
-        Saves the following keys to each species' simout:
-        - y: Concentration vectors
+        Saves the following keys to each species' `simout` dictionary attribute:
+        - y : np.ndarray
+            Concentration vectors
+
+        Returns
+        -------
+        None or scipy.integrate._ivp.ivp.OdeResult or list of scipy.integrate._ivp.ivp.OdeResult
         """
         #TODO: check how combinations are arranged and make sure its intuitive to separate and use them (ie the indexing is clear)
         #TODO: More analytically approximate the time scale.
@@ -294,6 +359,25 @@ class ODESolver(BaseSimulator):
         """
         Estimate the timespan needed for convergence based on the 
         smallest magnitude of the Jacobian eigenvalues at initial conditions
+        
+        Parameters:
+        ----------
+        y0 : np.ndarray
+            The initial conditions of the system
+        
+        Returns:
+        -------
+        tuple[float, float]
+            A tuple containing the estimated timespan needed for convergence.
+            The first element of the tuple is the start time (0) and the second
+            element is the estimated end time based on the smallest magnitude
+            of the Jacobian eigenvalues at the initial conditions.
+        
+        Raises:
+        ------
+        ValueError
+            If no eigenvalues above the threshold are found, indicating that
+            the time scale cannot be estimated.
         """
         eigenvalues = np.linalg.eigvals(self.system.simin["J_func_wrap"](None, y0))
         eigenvalue_threshold = 1e-6 # below 1e-6 is considered insignificant. float32 cutoff maybe

@@ -12,23 +12,30 @@ from ..utils.logging import Logger
     
 class Species:
     def __init__(self, name: str, y0: Union[np.ndarray,float], label=None, color=None):
-        """
-        Args:
-        - name: Name of the species.
-        - y0: Initial concentration of the species.
-            Array Example: {"Ligand":np.linspace(1,1500,100)} for a Michaelis-Menten ligand concentration scan.
-        - label: Useful for plotting. Will default to NAME.
-        - color: useful for plotting. Best added by ..utils.Plotting.assign_colors_to_species().
+            """
+            Initialize a species object.
 
-        """
-        self.name = name
-        self.y0 = np.array([y0]) if np.isscalar(y0) else np.array(y0)
-        self.label = label or name
-        self.index = None # added by NState
-        self.color = color
-        self.sym = symbols(name)
-        self.simin = None # added by simulator
-        self.simout = None # added by simulator
+            Parameters
+            ----------
+            name : str
+                Name of the species.
+            y0 : Union[np.ndarray, float]
+                Initial concentration of the species.
+                Array Example: {"Ligand":np.linspace(1,1500,100)} for a Michaelis-Menten ligand concentration scan.
+            label : str, optional
+                Useful for plotting. Will default to NAME.
+            color : str, optional
+                Useful for plotting. Best added by ..utils.Plotting.assign_colors_to_species().
+
+            """
+            self.name = name
+            self.y0 = np.array([y0]) if np.isscalar(y0) else np.array(y0)
+            self.label = label or name
+            self.index = None  # added by NState
+            self.color = color
+            self.sym = symbols(name)
+            self.simin = None  # added by simulator
+            self.simout = None  # added by simulator
 
     def __repr__(self):
         return f"{self.name} (Initial Concentration: {self.y0}, Label: {self.label})"
@@ -36,13 +43,18 @@ class Species:
 class Transition:
     def __init__(self, name: str, k, source: list, target: list, label=None, index=None):
         """
-        Args:
-        - name: Name of the rate constant.
-        - k: Value of the rate constant.
-        - source: List of (SPECIES, COEFF) tuples or "{COEFF}{SPECIES}" strings
-        - target: List of (SPECIES, COEFF) tuples or "{COEFF}{SPECIES}" strings
-        - label: Could be useful for plotting. Will default to NAME.
-
+        Parameters
+        ----------
+        name : str
+            Name of the rate constant.
+        k : float
+            Value of the rate constant.
+        source : list
+            List of (SPECIES, COEFF) tuples or "{COEFF}{SPECIES}" strings.
+        target : list
+            List of (SPECIES, COEFF) tuples or "{COEFF}{SPECIES}" strings.
+        label : str, optional
+            Could be useful for plotting. Will default to NAME.
         """
         self.name = name # should be the name of the rate constant for all intents and purposes, eg "kon"
         self.k = k
@@ -62,31 +74,52 @@ class Transition:
 
     @staticmethod
     def _parse_species_string(species_str):
-        """
-        Extract coefficient and species name from species string.
+            """
+            Extract coefficient and species name from species string.
 
-        Args:
-        - species_str: A species string, e.g., '2A'.
+            Parameters
+            ----------
+            species_str : str
+                A species string, e.g., '2A'.
 
-        Returns:
-        tuple: A tuple of species name (str) and stoichiometric coefficient (int).
-        """
-        match = re.match(r"(-?\d*\.?\d*)(\D.*)", species_str)
-        if match and match.groups()[0]:
-            coeff = match.groups()[0]
-            if coeff == '-':
-                coeff = -1
-            coeff = integerable_float(float(coeff))
-        else:
-            coeff = 1
-        name = match.groups()[1] if match else species_str
-        return name,coeff
+            Returns
+            -------
+            tuple
+                A tuple of species name (str) and stoichiometric coefficient (int).
+            """
+            match = re.match(r"(-?\d*\.?\d*)(\D.*)", species_str)
+            if match and match.groups()[0]:
+                coeff = match.groups()[0]
+                if coeff == '-':
+                    coeff = -1
+                coeff = integerable_float(float(coeff))
+            else:
+                coeff = 1
+            name = match.groups()[1] if match else species_str
+            return name,coeff
     
     @staticmethod            
     def _format_transition(tr,direction=None):
         """
         Format a transition by extracting and combining coefficients and species names.
         Is idempotent.
+
+        Parameters
+        ----------
+        tr : list
+            List of (SPECIES, COEFF) tuples or "{COEFF}{SPECIES}" strings.
+        direction : str, optional
+            Direction of the transition. Default is None.
+
+        Returns
+        -------
+        list
+            List of (SPECIES, COEFF) tuples.
+
+        Raises
+        ------
+        ValueError
+            If the transition or species tuples are invalid.
         """
         parsed_species = {}
         for sp in tr:
@@ -120,50 +153,58 @@ class NState:
     #TODO: is_linear() or get degree of linearity. will loops show up as a degree?
     
     def __init__(self, config: dict, logfilename=None, quiet=False):
-        """
-        Initialize the NState class with configuration data. Can be any degree of nonlinearity.
+            """
+            Initialize the NState class with configuration data. Can be any degree of nonlinearity.
 
-        Args:
-        - config: Configuration containing species and transitions.
-                    Species should contain name, initial concentration, and label.
-                    Transitions should contain name, source-species, target-species, value, and label.
+            Parameters
+            ----------
+            config : dict
+                Configuration containing species and transitions.
+                Species should contain name, initial concentration, and label.
+                Transitions should contain name, source-species, target-species, and k value.
+            logfilename : str, optional
+                Name of the log file (default is None).
+            quiet : bool, optional
+                Flag indicating whether to suppress log output (default is False).
 
-        Raises:
-        ValueError: If config is invalid.
-        """
-        self.log = Logger(quiet=quiet, logfilename=logfilename)
+            Raises
+            ------
+            ValueError
+                If config is invalid.
+            """
+            self.log = Logger(quiet=quiet, logfilename=logfilename)
 
-        self._validate_config(config)
-        self.config = copy.deepcopy(config)
-    
-        self.species = {
-            name: Species(
-                name=name,
-                y0=np.array([data["y0"]]) if np.isscalar(data["y0"]) else np.array(data["y0"]),
-                label=data.get('label', name),
-                color=data.get('color')
-            ) for name, data in config['species'].items()
-        }
+            self._validate_config(config)
+            self.config = copy.deepcopy(config)
+        
+            self.species = {
+                name: Species(
+                    name=name,
+                    y0=np.array([data["y0"]]) if np.isscalar(data["y0"]) else np.array(data["y0"]),
+                    label=data.get('label', name),
+                    color=data.get('color')
+                ) for name, data in config['species'].items()
+            }
 
-        self.transitions = {
-            name: Transition(
-                name=name,
-                k=data['k'],
-                source=data['source'],
-                target=data['target'],
-                label=data.get('label', name)
-            ) for name, data in config['transitions'].items()
-        }
+            self.transitions = {
+                name: Transition(
+                    name=name,
+                    k=data['k'],
+                    source=data['source'],
+                    target=data['target'],
+                    label=data.get('label', name)
+                ) for name, data in config['transitions'].items()
+            }
 
-        self.setup()
-        self.simulator = None
-        self.log.info(f"NState system initialized successfully.\n")
+            self.setup()
+            self.simulator = None
+            self.log.info(f"NState system initialized successfully.\n")
 
     def setup(self):
         """
-        Use this if you added transitions or species after initialization.
-        This is called in __init__ so you don't need to call it again unless you change the scheme.
-        WARNING: This will basically reinitialize everything besides the logger and config.
+        Reinitialize the system after adding transitions or species.
+        This method should be called if you modify the scheme after initialization.
+        WARNING: This will reinitialize everything except the logger and config.
         """
         #TODO: this needs testing. Make sure that its fine to not reinit the concentrations
         # Document the order of the species
@@ -183,12 +224,6 @@ class NState:
         return True
 
     def _validate_species(self):
-        """
-        Validate the species data in the configuration.
-
-        Returns:
-        bool: True if valid, False otherwise.
-        """
         #TODO: use assign color 
         labels = set()
         for name, data in self.species.items():
@@ -203,19 +238,24 @@ class NState:
     def set_simulator(self, simulator, *args, **kwargs) -> None:
         """
         Sets and initializes the simulator for the system. 
-        Sets the document string of the simulate method to that of the simulator.
-        
-        This isn't as good as just doing 
-            ```python
-            system.simulator = simulator(system)
-            system.simulator.simulate(...)
-            ```
-        because IDE syntax and doc helpers can't seem to pick up the new simulator attribute and simulate method.
 
-        Args:
-        - simulator: Unless using a custom simulator, use the provided simulators in gekim.simulators.
-        - *args: Additional arguments to pass to the simulator.
-        - **kwargs: Additional keyword arguments to pass to the simulator.
+        Parameters
+        ----------
+        simulator : class
+            The simulator class to use for the system. Unless using a custom simulator, use the provided simulators in gekim.simulators.
+        *args : tuple, optional
+            Additional arguments to pass to the simulator.
+        **kwargs : dict, optional
+            Additional keyword arguments to pass to the simulator.
+
+        Notes
+        -----
+        This method is not as good as just doing:
+        ```python
+        system.simulator = simulator(system)
+        system.simulator.simulate(...)
+        ```
+        because IDE syntax and doc helpers may not pick up the new simulator attribute and simulate method.
         """
         self.simulator = simulator(self, *args, **kwargs)
         self.simulate = self.simulator.simulate
@@ -225,14 +265,24 @@ class NState:
     def sum_species_simout(self,whitelist:list=None,blacklist:list=None):
         """
         Sum the simout y-values of specified species.
-        Whitelist and blacklist cannot be provided simultaneously.
 
-        Args:
-        - whitelist: Names of species to include in the sum.
-        - blacklist: Names of species to exclude from the sum.
+        Parameters
+        ----------
+        whitelist : list, optional
+            Names of species to include in the sum.
+        blacklist : list, optional
+            Names of species to exclude from the sum.
 
-        Returns:
-        - The sum of the simulated values.
+        Returns
+        -------
+        numpy.ndarray or None
+            The sum of the simulated values. Returns None if the simulated data is not found for any species.
+
+        Raises
+        ------
+        ValueError
+            If both whitelist and blacklist are provided.
+
         """
         if whitelist and blacklist:
             raise ValueError("Provide either a whitelist or a blacklist, not both.")
@@ -254,8 +304,19 @@ class NState:
     def mat2sp_simout(self,matrix,key_name="y"):
         """
         Save species vectors from a concentration matrix to the respective species[NAME].simout[key_name] dict based on species[NAME].index.
+        
+
+        Parameters
+        ----------
+        matrix : numpy.ndarray
+            The concentration matrix containing the species vectors.
+        key_name : str, optional
+            The key name to use for saving the species vectors in the species dictionary (default is "y").
+
+        Notes
+        -----
         Useful for saving the output of a continuous solution to the species dictionary.
-            Don't forget `system.simout["t_cont"] = t`
+        Don't forget to save time, too, eg `system.simout["t_cont"] = t`
         """
         for _, sp_data in self.species.items():
             sp_data.simout[key_name] = matrix[sp_data.index]

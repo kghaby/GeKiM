@@ -13,15 +13,23 @@ from . import fitting
 
 def occ_final_wrt_t(t,kobs,Etot,uplim=1):
     '''
-    Args:
-    - t: Array of timepoints.
-    - kobs: Observed rate constant.
-    - Etot: Total concentration of E across all species.
-    - uplim: Upper limit scalar of the curve. 
-            The fraction of total E typically. Default=1, ie 100%. 
+    Calculate the occupancy of final occupancy (Occ_cov) with respect to time.
 
-    Returns:
-    - np.array: Occupancy of final occupancy (Occ_cov).
+    Parameters
+    ----------
+    t : np.ndarray
+        Array of timepoints.
+    kobs : float
+        Observed rate constant.
+    Etot : float
+        Total concentration of E across all species.
+    uplim : float, optional
+        Upper limit scalar of the curve. The fraction of total E typically. Default is 1, i.e., 100%.
+
+    Returns
+    -------
+    np.ndarray
+        Occupancy of final occupancy (Occ_cov).
     '''
     return uplim*Etot*(1-np.e**(-kobs*t))
 
@@ -29,26 +37,42 @@ def kobs_uplim_fit_to_occ_final_wrt_t(t: np.ndarray, occ_final: np.ndarray, nond
     '''
     Fit kobs to the first order occupancy over time.
 
-    Args:
-    - t: Array of timepoints.
-    - occ_final: Array of observed occupancy, i.e. concentration.
-    - nondefault_params (dict): A structured dictionary of parameters with 'fixed','guess', and 'bound' keys. Include any params to update the default.
+    Parameters
+    ----------
+    t : np.ndarray
+        Array of timepoints.
+    occ_final : np.ndarray
+        Array of observed occupancy, i.e. concentration.
+    nondefault_params : dict, optional
+        A structured dictionary of parameters with 'fixed','guess', and 'bound' keys. Include any params to update the default.
+        ```python
         default_params = {
-            "kobs": {"fix": None, "guess": 0.01, "bounds": (0,np.inf)}, # Observed rate constant
-            "Etot": {"fix": None, "guess": 1, "bounds": (0,np.inf)},    # Total concentration of E over all species
-            "uplim": {"fix": None, "guess": 1, "bounds": (0,np.inf)},   # Scales the upper limit of the curve
+            # Observed rate constant
+            "kobs": {"fix": None, "guess": 0.01, "bounds": (0,np.inf)}, 
+            # Total concentration of E over all species
+            "Etot": {"fix": None, "guess": 1, "bounds": (0,np.inf)},    
+            # Scales the upper limit of the curve
+            "uplim": {"fix": None, "guess": 1, "bounds": (0,np.inf)},   
         }
-    - xlim (tuple): Limits for the time points considered in the fit (min_t, max_t).
+        ```
+    xlim : tuple, optional
+        Limits for the time points considered in the fit (min_t, max_t).
 
-    Returns:
-    - an instance of the FitOutput class
-    
-    Example:
+    Returns
+    -------
+    FitOutput
+        An instance of the FitOutput class
+
+    Example
+    -------
     ```python
-    fit_output =  ci.kobs_uplim_fit_to_occ_final_wrt_t(t,system.system.species["EI"].simout["y"],nondefault_params={"Etot":{"fix":concE0}})
+    fit_output =  ci.kobs_uplim_fit_to_occ_final_wrt_t(t,
+                    system.system.species["EI"].simout["y"],
+                    nondefault_params={"Etot":{"fix":concE0}})
     ```
     Will fit kobs and uplim to the concentration of EI over time, fixing Etot at concE0.
     '''
+
     # Default
     params = {
         "kobs": {"fix": None, "guess": 0.01, "bounds": (0,np.inf)},

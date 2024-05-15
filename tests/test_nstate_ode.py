@@ -22,10 +22,10 @@ t = np.linspace(kon, 10000, 10000)
 schemes={}
 schemes["3S_vani"] = {
     "species": {
-        "I": {"conc": concI0, "label": r"I"},
-        "E": {"conc": concE0, "label": r"E"},
-        "E_I": {"conc": 0, "label": r"E${\cdot}$I"},
-        "EI": {"conc": 0, "label": r"E-I"},
+        "I": {"y0": concI0, "label": r"I"},
+        "E": {"y0": concE0, "label": r"E"},
+        "E_I": {"y0": 0, "label": r"E${\cdot}$I"},
+        "EI": {"y0": 0, "label": r"E-I"},
     },
     "transitions": {
         "k1": {"k": kon, "source": ["E", "I"], "target": ["E_I"], "label": r"$k_{on}$"},
@@ -36,10 +36,10 @@ schemes["3S_vani"] = {
 }
 schemes["3S_mod1.1"] = {
     "species": {
-        "I": {"conc": concI0, "label": r"I"},
-        "E": {"conc": concE0, "label": r"E"},
-        "E_I": {"conc": 0, "label": r"E${\cdot}$I"},
-        "EI": {"conc": 0, "label": r"E-I"},
+        "I": {"y0": concI0, "label": r"I"},
+        "E": {"y0": concE0, "label": r"E"},
+        "E_I": {"y0": 0, "label": r"E${\cdot}$I"},
+        "EI": {"y0": 0, "label": r"E-I"},
     },
     "transitions": {
         "k1": {"k": kon, "source": ["E", "2.0I"], "target": ["E_I"], "label": r"$k_{on}$"},
@@ -50,10 +50,10 @@ schemes["3S_mod1.1"] = {
 }
 schemes["3S_mod1.2"] = {
     "species": {
-        "I": {"conc": concI0, "label": r"I"},
-        "E": {"conc": concE0, "label": r"E"},
-        "E_I": {"conc": 0, "label": r"E${\cdot}$I"},
-        "EI": {"conc": 0, "label": r"E-I"},
+        "I": {"y0": concI0, "label": r"I"},
+        "E": {"y0": concE0, "label": r"E"},
+        "E_I": {"y0": 0, "label": r"E${\cdot}$I"},
+        "EI": {"y0": 0, "label": r"E-I"},
     },
     "transitions": {
         "k1": {"k": kon, "source": ["E", "I", "I"], "target": ["E_I"], "label": r"$k_{on}$"},
@@ -64,10 +64,10 @@ schemes["3S_mod1.2"] = {
 }
 schemes["3S_mod2.1"] = {
     "species": {
-        "I": {"conc": concI0, "label": r"I"},
-        "E": {"conc": concE0, "label": r"E"},
-        "E_I": {"conc": 0, "label": r"E${\cdot}$I"},
-        "EI": {"conc": 0, "label": r"E-I"},
+        "I": {"y0": concI0, "label": r"I"},
+        "E": {"y0": concE0, "label": r"E"},
+        "E_I": {"y0": 0, "label": r"E${\cdot}$I"},
+        "EI": {"y0": 0, "label": r"E-I"},
     },
     "transitions": {
         "k1": {"k": kon, "source": ["2E", "I"], "target": ["E_I","E"], "label": r"$k_{on}$"},
@@ -77,7 +77,7 @@ schemes["3S_mod2.1"] = {
     },
 }
 
-gk.utils.Plotting.assign_colors_to_species(schemes,saturation_range=(0.5,0.8),lightness_range=(0.4,0.5),overwrite_existing=False,seed=1)
+gk.utils.plotting.assign_colors_to_species(schemes,saturation_range=(0.5,0.8),lightness_range=(0.4,0.5),overwrite_existing=False,seed=1)
 
 # Old NState functions for making sure new versions produce the same results
 def _ode_old(system, t, concentrations):
@@ -101,7 +101,7 @@ def _solve_odes_old(system, t, method='BDF', rtol=1e-6, atol=1e-8, output_raw=Fa
     """
     Solve the ODEs for the system.
     """
-    conc0 = np.array([np.atleast_1d(sp.conc)[0] for _, sp in system.species.items()])
+    conc0 = np.array([np.atleast_1d(sp.y0) for _, sp in system.species.items()])
     t_span = (t[0], t[-1])
     system.log_odes()
 
@@ -115,7 +115,7 @@ def _solve_odes_old(system, t, method='BDF', rtol=1e-6, atol=1e-8, output_raw=Fa
 
         system.t = t
         for name,data in system.species.items():
-            data.conc = solution.y[data.index]
+            data.simout["y"] = solution.y[data.index]
 
         system.logger.info("ODEs solved successfully.")
         if output_raw:
@@ -130,9 +130,10 @@ def _solve_odes_old(system, t, method='BDF', rtol=1e-6, atol=1e-8, output_raw=Fa
 for name,scheme in schemes.items():
     system = gk.schemes.NState(scheme,quiet=True)
     #sol = _solve_odes_old(system,t,output_raw=True) #testing with old (nonvectorized) version
-    sol = system.solve_odes(t,output_raw=True)
-    final_state = system.species["EI"].conc
-    all_bound = system.sum_conc(blacklist=["E","I"])
+    system.set_simulator(gk.simulators.ODESolver)
+    sol = system.simulator.simulate(t_eval=t,output_raw=True)
+    final_state = system.species["EI"].simout["y"]
+    all_bound = system.sum_species_simout(blacklist=["E","I"])
     fit_output = ci.kobs_uplim_fit_to_occ_final_wrt_t(
         t,final_state,nondefault_params={"Etot":{"fix":concE0}})
     schemes[name]["fit_output"] = fit_output
@@ -145,15 +146,15 @@ for name,scheme in schemes.items():
         for species, sp_data in system.species.items():
             if species == "I":
                 continue
-            plt.plot(t, sp_data.conc, label=sp_data.label,color=sp_data.color)
+            plt.plot(t, sp_data.simout["y"], label=sp_data.label,color=sp_data.color)
 
         # All bound states
-        all_bound = system.sum_conc(blacklist=["E","I"])
+        all_bound = system.sum_species_simout(blacklist=["E","I"])
         plt.plot(t, all_bound,label='All Bound States',color="grey")
 
         # Fitted data
         plt.plot(t,  fit_output.fitted_data,label=r"New Fit: $k_{\text{obs}}$ = "+
-                 str(gk.utils.round_sig(fit_output.fitted_params["kobs"],3))+r" $\text{s}^{-1}$",ls='--', color="black")
+                 str(gk.utils.helpers.round_sig(fit_output.fitted_params["kobs"],3))+r" $\text{s}^{-1}$",ls='--', color="black")
 
         plt.xlabel('Time (s)')
         plt.ylabel('Concentration (nM)')
@@ -276,7 +277,7 @@ def compare_dictionaries(dict1, dict2, tol=1e-9):
 
 def compare_systems(sys1_label,sys1_dict, sys2_label,sys2_dict, t):
     if np.allclose(sys1_dict["sol"].y, sys2_dict["sol"].y,rtol=1e-6) and \
-        gk.utils.compare_dictionaries(sys1_dict["fit_output"].fitted_params,sys2_dict["fit_output"].fitted_params,rel_tol=1e-6):
+        gk.utils.helpers.compare_dictionaries(sys1_dict["fit_output"].fitted_params,sys2_dict["fit_output"].fitted_params,rel_tol=1e-6):
         print(f"GOOD: SOLUTION MATCH: {sys1_label} and {sys2_label}","\n")
     else:
         print(f"BAD: SOLUTION MISMATCH: {sys1_label} and {sys2_label}")

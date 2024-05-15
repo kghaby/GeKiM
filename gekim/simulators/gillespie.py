@@ -1,15 +1,59 @@
 import numpy as np
-from .simulator import Simulator
+from .base_simulator import BaseSimulator
 
-class Gillespie(Simulator):
+        #TODO: Although i do like the idea of being able to continue from a previous run, so add an option called "continue" which takes an integer which points to the index of the run that its continuing from
+        #TODO: show pop dist is like rates
+        # Initialize
+        #TODO: S2.alt1 breaks this from negative rates somehow
+    #TODO: running prob? and test more
+    #TODO: type hints on algo
+    #TODO: 2S I goes neg
+
+class Gillespie(BaseSimulator):
     """
     Gillespie's algorithm for stochastic simulation. Handles non-linear kinetics and complex stoichiometry.
     Does not work if any transitions are > (pseudo-)first order.  
     """
+    def setup(self):
+        pass
 
-    def simulate(self, t_max, conc0, num_replicates, output_times, max_iter=1000):
-        results = [self._simulate_replicate(t_max, conc0, output_times, max_iter) for _ in range(num_replicates)]
-        return self._aggregate_replicate_data(results)
+    def _process_simouts(self, simouts, y0_mat_len):
+        if y0_mat_len == 1:
+            simout = simouts[0]
+            self.system.simout["t"] = simout['t']
+            self.system.simout["prob_dist"] = simout['prob_dist']
+            for sp_name, sp_data in self.system.species.items():
+                sp_data.simout["prob_dist"] = simout['prob_dist'][:, sp_data.index]
+        else:
+            self.simout["t"] = [simout['t'] for simout in simouts]
+            self.simout["prob_dist"] = [simout['prob_dist'] for simout in simouts]
+            for sp_name, sp_data in self.system.species.items():
+                sp_data.simout["prob_dist"] = [simout['prob_dist'][:, sp_data.index] for simout in simouts]
+    
+    def simulate(self, t_max, num_replicates=1, output_times=None, output_raw=False,**kwargs):
+        """
+        Run a Gillespie simulation.
+        
+        Args:
+
+        """
+        y0_mat = self._make_y0_mat()
+        y0_mat_len = len(y0_mat)
+        raw_simouts = [self.simulate_single(t_max, y0, num_replicates, output_times,**kwargs) for y0 in y0_mat]
+        self._process_simouts(raw_simouts, y0_mat_len)
+        if output_raw:
+            if y0_mat_len == 1:
+                self.system.log.info("Returning raw simulation output.\n")
+                return raw_simouts[0]
+            self.system.log.info("Returning list of raw simulation outputs.\n")        
+            return raw_simouts
+        else:
+            self.system.log.info("Not returning raw simulation output. Use output_raw=True to return raw data.\n")
+            return
+
+    def simulate_single(self, t_max, conc0, num_replicates, output_times, max_iter=1000):
+        simouts = [self._simulate_replicate(t_max, conc0, output_times, max_iter) for _ in range(num_replicates)]
+        return self._aggregate_replicate_data(simouts)
 
     def _simulate_replicate(self, t_max, conc0, output_times, max_iter):
         times, states = [0], [conc0]
@@ -24,7 +68,7 @@ class Gillespie(Simulator):
                 break
             times.append(new_time)
             chosen_transition = np.random.choice(len(rates), p=rates / total_rate)
-            transitions = list(self.scheme.transitions.values())
+            transitions = list(self.system.transitions.values())
             states.append(self._apply_transition(states[-1], transitions[chosen_transition]))
 
         return {'t': np.array(times), 'state': np.array(states)}
@@ -40,3 +84,18 @@ class Gillespie(Simulator):
         idxs[idxs < 0] = 0
         return states[idxs]
 
+    def _calculate_transition_rates(self, state):
+        rates = []
+        for tr in self.system.transitions.values():
+            rate = tr.k * np.prod([state[self.system.species[sp_name].index] ** coeff for sp_name, coeff in tr.source])
+            rates.append(rate)
+        return np.array(rates)
+
+    def _apply_transition(self, current_state, transition):
+        new_state = np.array(current_state)
+        # Apply the transition
+        for sp_name, coeff in transition.source:
+            new_state[self.system.species[sp_name].index] -= coeff
+        for sp_name, coeff in transition.target:
+            new_state[self.system.species[sp_name].index] += coeff
+        return new_state

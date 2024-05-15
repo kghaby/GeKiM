@@ -16,10 +16,10 @@ schemes["3S"] = {
         "kinactb": {"k": kinactb, "source": ["EI"], "target": ["E_I"]},
     },
     "species": {
-        "I": {"conc": concI0, "label": r"I"},
-        "E": {"conc": concE0, "label": r"E"},
-        "E_I": {"conc": 0, "label": r"E${\cdot}$I"},
-        "EI": {"conc": 0, "label": r"E${\mydash}$I"},
+        "I": {"y0": concI0, "label": r"I"},
+        "E": {"y0": concE0, "label": r"E"},
+        "E_I": {"y0": 0, "label": r"E${\cdot}$I"},
+        "EI": {"y0": 0, "label": r"E${\mydash}$I"},
     },
 }
 

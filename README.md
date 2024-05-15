@@ -28,26 +28,26 @@ from gekim.analysis import covalent_inhibition as ci
 concI0,concE0 = 100,1
 scheme = {
     'species': {
-        "I": {"conc": concI0, "label": "$I$"},
-        "E": {"conc": concE0, "label": "$E$"},
-        "EI": {"conc": 0, "label": "$EI$"},
+        "I": {"y0": concI0, "label": "I"},
+        "E": {"y0": concE0, "label": "E"},
+        "EI": {"y0": 0, "label": "EI"},
     },    
     'transitions': {
-        "kon": {"k": 0.01, "source": ["E","I"], "target": ["EI"]},
-        "koff": {"k": 0.1, "source": ["EI"], "target": ["E","I"]},
+        "kon": {"k": 0.01, "source": ["2E","I"], "target": ["EI"]},
+        "koff": {"k": 0.1, "source": ["EI"], "target": ["2E","I"]},
     }
 }
 
 # Create a model
 system = gk.schemes.NState(scheme)
 
-# Define time points and simulate. In this example we're doing a deterministic simulation of the concentrations of each species. 
-t = np.linspace(0.0001, 1000, 10)
-system.solve_odes(t)
+# Choose a simulator and go. In this example we're doing a deterministic simulation of the concentrations of each species. 
+system.simulator = gk.simulators.ODESolver(system)
+system.simulator.simulate()
 
 # Fit the data to experimental models to extract mock-experimental measurements
-final_state = system.species["EI"].conc
-all_bound = system.sum_conc(blacklist=["E","I"])
+final_state = system.species["EI"].simout["y"]
+all_bound = system.sum_species_simout(blacklist=["E","I"])
 fit_output = ci.kobs_uplim_fit_to_occ_final_wrt_t(
     t,final_state,nondefault_params={"Etot":{"fix":concE0}})
 print(f"Fit: {fit_output.fitted_params}\n")
@@ -55,7 +55,7 @@ print(f"Fit: {fit_output.fitted_params}\n")
 For more detailed examples, please refer to the examples directory.
 
 ## Documentation
-API Documentation with examples can be found at TODO.
+API Documentation with examples will be done eventually.
 
 ## Contributing
 If you have suggestions or want to contribute code, please feel free to open an issue or a pull request.
@@ -67,3 +67,4 @@ GeKiM is licensed under the GPL-3.0 license.
 kyleghaby@gmail.com
 
 ## TODO
+so much

@@ -13,12 +13,12 @@ from ..utils.logging import Logger
 class Species:
     def __init__(self, name: str, y0: Union[np.ndarray,float], label=None, color=None):
         """
-        Recommended to initialize with the following arguments:
-        name: Name of the species.
-        y0: Initial concentration of the species.
+        Args:
+        - name: Name of the species.
+        - y0: Initial concentration of the species.
             Array Example: {"Ligand":np.linspace(1,1500,100)} for a Michaelis-Menten ligand concentration scan.
-        label: Useful for plotting. Will default to NAME.
-        color: useful for plotting. Best added by ..utils.Plotting.assign_colors_to_species().
+        - label: Useful for plotting. Will default to NAME.
+        - color: useful for plotting. Best added by ..utils.Plotting.assign_colors_to_species().
 
         """
         self.name = name
@@ -36,12 +36,12 @@ class Species:
 class Transition:
     def __init__(self, name: str, k, source: list, target: list, label=None, index=None):
         """
-        Recommended to initialize with the following arguments:
-        name: Name of the rate constant.
-        k: Value of the rate constant.
-        source: List of (SPECIES, COEFF) tuples or "{COEFF}{SPECIES}" strings
-        target: List of (SPECIES, COEFF) tuples or "{COEFF}{SPECIES}" strings
-        label: Could be useful for plotting. Will default to NAME.
+        Args:
+        - name: Name of the rate constant.
+        - k: Value of the rate constant.
+        - source: List of (SPECIES, COEFF) tuples or "{COEFF}{SPECIES}" strings
+        - target: List of (SPECIES, COEFF) tuples or "{COEFF}{SPECIES}" strings
+        - label: Could be useful for plotting. Will default to NAME.
 
         """
         self.name = name # should be the name of the rate constant for all intents and purposes, eg "kon"
@@ -66,7 +66,7 @@ class Transition:
         Extract coefficient and species name from species string.
 
         Args:
-        species_str (str): A species string, e.g., '2A'.
+        - species_str: A species string, e.g., '2A'.
 
         Returns:
         tuple: A tuple of species name (str) and stoichiometric coefficient (int).
@@ -124,9 +124,9 @@ class NState:
         Initialize the NState class with configuration data. Can be any degree of nonlinearity.
 
         Args:
-        config (dict): Configuration containing species and transitions.
-                       Species should contain name, initial concentration, and label.
-                       Transitions should contain name, source-species, target-species, value, and label.
+        - config: Configuration containing species and transitions.
+                    Species should contain name, initial concentration, and label.
+                    Transitions should contain name, source-species, target-species, value, and label.
 
         Raises:
         ValueError: If config is invalid.
@@ -260,7 +260,4 @@ class NState:
         for _, sp_data in self.species.items():
             sp_data.simout[key_name] = matrix[sp_data.index]
         return
-
-                
-
 

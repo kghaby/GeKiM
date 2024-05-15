@@ -19,7 +19,7 @@ pip install .
 ```
 
 ## Usage
-Here is a basic example of how to use GeKiM to create and simulate a kinetic model:
+Here is a basic example of how to use GeKiM to create and simulate a kinetic system:
 ```python
 import gekim as gk
 from gekim.analysis import covalent_inhibition as ci
@@ -38,10 +38,11 @@ scheme = {
     }
 }
 
-# Create a model
+# Initialize a system with your schematic dictionary
 system = gk.schemes.NState(scheme)
 
-# Choose a simulator and go. In this example we're doing a deterministic simulation of the concentrations of each species. 
+# Choose a simulator and go. In this example we're doing a deterministic 
+# simulation of the concentrations of each species over time.
 system.simulator = gk.simulators.ODESolver(system)
 system.simulator.simulate()
 

@@ -248,6 +248,7 @@ class NState:
 
             self.setup()
             self.simulator = None
+            self.paths = None
             self.log.info(f"NState system initialized successfully.\n")
 
     def setup(self):
@@ -374,7 +375,7 @@ class NState:
             sp_data.simout[key_name] = matrix[sp_data.index]
         return
 
-    def find_paths(self, start_species: Union[str, Species], end_species: Union[str, Species], only_linear_paths=True, prob_cutoff=1e-9, max_depth=50):
+    def find_paths(self, start_species: Union[str, Species], end_species: Union[str, Species], only_linear_paths=True, prob_cutoff=1e-9, max_depth=20):
         """
         Find paths from start_species to end_species.
 
@@ -387,18 +388,18 @@ class NState:
         only_linear_paths : bool, optional
             Whether to only find linear paths (no backtracking or loops) (default is True).
         prob_cutoff : float, optional
-            Cutoff probability to stop searching current path (default is 1e-3).
+            Cutoff probability to stop searching current path (default is 1e-9).
         max_depth : int, optional
-            Maximum depth to limit the search (default is 10).
+            Maximum depth to limit the search (default is 20).
 
-        Returns
+        Notes
         -------
-        list
-            List of Path objects representing the found paths.
+        Saves a list of paths in `self.paths` sorted by probability.
+            
         """
         #TODO: use J_sym?
+        #TODO: 
         def get_transition_probability(transition, current_sp_name):
-            # Get total rate for outgoing transitions from current_species
             total_rate = sum(tr.k for tr in self.transitions.values() if current_sp_name in [sp[0] for sp in tr.source])
             return transition.k / total_rate if total_rate > 0 else 0
 
@@ -417,13 +418,13 @@ class NState:
                         continue
 
                     for next_sp_name in next_species_list:
-                        if next_sp_name in visited_names and only_linear_paths:
-                            continue
                         next_prob = current_prob * get_transition_probability(transition, current_sp_name)
                         visited_names.add(next_sp_name)
                         current_path.append(self.species[next_sp_name])
                         current_transitions.append(transition)
                         dfs(next_sp_name, target_sp_name, visited_names, current_path, current_transitions, next_prob, depth + 1)
+                        if only_linear_paths: #bandaid? did it work?
+                            visited_names.remove(next_sp_name)
                         current_path.pop()
                         current_transitions.pop()
 
@@ -435,7 +436,7 @@ class NState:
                 self.log.warning(f"Transition '{transition.name}' is not linear!")
         if not all_linear_tr:
             self.log.error("This method only uses TRANSITION.k to calculate probabilities, and expects single TRANSITION.source to contain only one species.\n" +
-                             "If possible, make all transitions linear (e.g., with a pseudo-first-order approximation).\n")
+                           "If possible, make all transitions linear (e.g., with a pseudo-first-order approximation).\n")
 
         if isinstance(start_species, str):
             start_species = self.species[start_species]
@@ -454,6 +455,13 @@ class NState:
         # Search
         self.paths = []
         dfs(start_species.name, end_species.name, {start_species.name}, [start_species], [], 1.0, 0)
+
+        total_prob = sum(path.probability for path in self.paths)
+        if total_prob > 0:
+            for path in self.paths:
+                path.probability /= total_prob
+    
+        self.paths.sort(key=lambda p: p.probability, reverse=True)
 
         self.log.info(f"Paths found from '{start_species.name}' to '{end_species.name}':")
         for path in self.paths:

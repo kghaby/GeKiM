@@ -6,8 +6,6 @@ from typing import Union
 from ..utils.helpers import integerable_float
 from ..utils.logging import Logger
 
-
-
 #TODO: find_linear_paths in kinetics2 and more general pathfinder in utils?
     
 class Species:
@@ -58,13 +56,14 @@ class Transition:
         """
         self.name = name # should be the name of the rate constant for all intents and purposes, eg "kon"
         self.k = k
-        self.source = Transition._format_transition(source,"source")  # List of (SPECIES, COEFF) tuples or "{COEFF}{SPECIES}" strings
-        self.target = Transition._format_transition(target,"target")  # List of (SPECIES, COEFF) tuples or "{COEFF}{SPECIES}" strings
+        self.source = Transition._format_state(source,"source")  # List of (SPECIES, COEFF) tuples or "{COEFF}{SPECIES}" strings
+        self.target = Transition._format_state(target,"target")  # List of (SPECIES, COEFF) tuples or "{COEFF}{SPECIES}" strings
         self.label = label or name
         self.index = index
         self.sym = symbols(name)
         self.simin = None # added by simulator
         self.simout = None # added by simulator
+        self.linear = self.is_linear()
         
 
     def __repr__(self):
@@ -72,44 +71,56 @@ class Transition:
         target_str = ' + '.join([f"{coeff}*{sp}" for sp, coeff in self.target])
         return f"{self.name} ({self.k}): {source_str} -> {target_str}"
 
+    def is_linear(self):
+        """
+        Check if a transition is linear.
+
+        Returns
+        -------
+        bool
+            True if the transition is linear, False otherwise.
+        """
+        # A first-order reaction must have exactly one reactant with a stoichiometric coefficient of 1
+        return len(self.source) == 1 and self.source[0][1] == 1
+
     @staticmethod
     def _parse_species_string(species_str):
-            """
-            Extract coefficient and species name from species string.
+        """
+        Extract coefficient and species name from species string.
 
-            Parameters
-            ----------
-            species_str : str
-                A species string, e.g., '2A'.
+        Parameters
+        ----------
+        species_str : str
+            A species string, e.g., '2A'.
 
-            Returns
-            -------
-            tuple
-                A tuple of species name (str) and stoichiometric coefficient (int).
-            """
-            match = re.match(r"(-?\d*\.?\d*)(\D.*)", species_str)
-            if match and match.groups()[0]:
-                coeff = match.groups()[0]
-                if coeff == '-':
-                    coeff = -1
-                coeff = integerable_float(float(coeff))
-            else:
-                coeff = 1
-            name = match.groups()[1] if match else species_str
-            return name,coeff
-    
+        Returns
+        -------
+        tuple
+            A tuple of species name (str) and stoichiometric coefficient (int).
+        """
+        match = re.match(r"(-?\d*\.?\d*)(\D.*)", species_str)
+        if match and match.groups()[0]:
+            coeff = match.groups()[0]
+            if coeff == '-':
+                coeff = -1
+            coeff = integerable_float(float(coeff))
+        else:
+            coeff = 1
+        name = match.groups()[1] if match else species_str
+        return name,coeff
+
     @staticmethod            
-    def _format_transition(tr,direction=None):
+    def _format_state(state,direction=None):
         """
         Format a transition by extracting and combining coefficients and species names.
         Is idempotent.
 
         Parameters
         ----------
-        tr : list
-            List of (SPECIES, COEFF) tuples or "{COEFF}{SPECIES}" strings.
+        state : list
+            State descriptor. List of (SPECIES, COEFF) tuples or "{COEFF}{SPECIES}" strings.
         direction : str, optional
-            Direction of the transition. Default is None.
+            Direction of the transition. Default is None. Can be "source" or "target".
 
         Returns
         -------
@@ -122,7 +133,7 @@ class Transition:
             If the transition or species tuples are invalid.
         """
         parsed_species = {}
-        for sp in tr:
+        for sp in state:
             if isinstance(sp, str):
                 name, coeff = Transition._parse_species_string(sp)
             elif isinstance(sp, tuple):
@@ -132,19 +143,58 @@ class Transition:
                     elif isinstance(sp[1], str) and isinstance(sp[2], (int, float)):
                         coeff, name = sp
                     else:
-                        raise ValueError(f"Invalid species tuple '{sp}' in transition '{tr}'.")
+                        raise ValueError(f"Invalid species tuple '{sp}' in transition '{state}'.")
                 else:
-                    raise ValueError(f"Invalid species tuple '{sp}' in transition '{tr}'.")
+                    raise ValueError(f"Invalid species tuple '{sp}' in transition '{state}'.")
             else:
-                raise ValueError(f"Invalid species '{sp}' in transition '{tr}'.")
+                raise ValueError(f"Invalid species '{sp}' in transition '{state}'.")
             if direction == "source" and coeff < 0:
-                raise ValueError(f"Negative coefficient '{coeff}' in source of transition '{tr}'.")
+                raise ValueError(f"Negative coefficient '{coeff}' in source of transition '{state}'.")
             if name in parsed_species:
                 parsed_species[name] += coeff # combine coeffs
             else:
                 parsed_species[name] = coeff
-        tr = [(name, coeff) for name, coeff in parsed_species.items()]
-        return tr
+        state = [(name, coeff) for name, coeff in parsed_species.items()]
+        return state
+    
+class Path:
+    """
+    Represents a path in a network of species transitions. 
+    Is created by `NState.find_paths()`
+
+    Attributes
+    ----------
+    species_path : list
+        List of species objects representing the path.
+    transitions_path : list
+        List of transition objects representing the transitions along the path.
+    probability : float
+        Probability of the path relative to other paths from `species[0]` to `species[-1]`
+
+    Methods
+    -------
+    __repr__()
+        Returns a string representation of the species path.
+
+    """
+
+    def __init__(self, species_path, transitions_path, probability):
+        self.species_path = species_path
+        self.transitions_path = transitions_path
+        self.probability = probability
+
+    def __repr__(self):
+        """
+        Returns a string representation of the Path object.
+
+        Returns
+        -------
+        str
+            String representation of the Path object.
+
+        """
+        path_str = ' -> '.join(['+'.join([sp.name for sp in group]) if isinstance(group, list) else group.name for group in self.species_path])
+        return f"Path({path_str}, Probability: {self.probability})"
 
 class NState:
     #TODO: Add stochastic method
@@ -324,3 +374,88 @@ class NState:
             sp_data.simout[key_name] = matrix[sp_data.index]
         return
 
+    def find_paths(self, start_species: Union[str, Species], end_species: Union[str, Species], only_linear_paths=True, prob_cutoff=1e-3, max_depth=10):
+        """
+        Find paths from start_species to end_species.
+
+        Parameters
+        ----------
+        start_species : str or Species
+            Name or object of the starting species.
+        end_species : str or Species
+            Name or object of the ending species.
+        only_linear_paths : bool, optional
+            Whether to only find linear paths (no backtracking or loops) (default is True).
+        prob_cutoff : float, optional
+            Cutoff probability to stop searching current path (default is 1e-3).
+        max_depth : int, optional
+            Maximum depth to limit the search (default is 10).
+
+        Returns
+        -------
+        list
+            List of Path objects representing the found paths.
+        """
+        def get_transition_probability(transition, current_sp_name):
+            # Get total rate for outgoing transitions from current_species
+            total_rate = sum(tr.k for tr in self.transitions.values() if current_sp_name in [sp[0] for sp in tr.source])
+            return transition.k / total_rate if total_rate > 0 else 0
+
+        def dfs(current_sp_name, target_sp_name, visited_names, current_path, current_transitions, current_prob, depth):
+            if current_sp_name == target_sp_name:
+                self.paths.append(Path(current_path[:], current_transitions[:], current_prob))
+                return
+
+            if current_prob < prob_cutoff or depth > max_depth:
+                return
+
+            for transition in self.transitions.values():
+                if current_sp_name in [sp[0] for sp in transition.source]:
+                    next_species_list = [sp[0] for sp in transition.target]
+                    if only_linear_paths and any(sp in visited_names for sp in next_species_list):
+                        continue
+
+                    for next_sp_name in next_species_list:
+                        next_prob = current_prob * get_transition_probability(transition, current_sp_name)
+                        visited_names.add(next_sp_name)
+                        current_path.append(self.species[next_sp_name])
+                        current_transitions.append(transition)
+                        dfs(next_sp_name, target_sp_name, visited_names, current_path, current_transitions, next_prob, depth + 1)
+                        #print(visited_names)
+                        #visited_names.remove(next_sp_name)
+                        current_path.pop()
+                        current_transitions.pop()
+
+        # Input validation
+        all_linear_tr = True
+        for transition in self.transitions.values():
+            if not transition.linear:
+                all_linear_tr = False
+                self.log.warning(f"Transition '{transition.name}' is not linear!")
+        if not all_linear_tr:
+            self.log.warning("This method only uses TRANSITION.k to calculate probabilities, so they will likely be inaccurate.\n" +
+                             "If possible, make all transitions linear (e.g., with a pseudo-first-order approximation).\n")
+
+        if isinstance(start_species, str):
+            start_species = self.species[start_species]
+        elif isinstance(start_species, Species):
+            pass
+        else:
+            raise ValueError("start_species must be a string or Species object.")
+    
+        if isinstance(end_species, str):
+            end_species = self.species[end_species]
+        elif isinstance(end_species, Species):
+            pass
+        else:
+            raise ValueError("end_species must be a string or Species object.")
+
+        # Search
+        self.paths = []
+        dfs(start_species.name, end_species.name, {start_species.name}, [start_species], [], 1.0, 0)
+
+        self.log.info(f"Paths found from '{start_species.name}' to '{end_species.name}':")
+        for path in self.paths:
+            self.log.info(str(path))
+        
+        return self.paths

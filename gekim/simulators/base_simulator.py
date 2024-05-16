@@ -21,6 +21,7 @@ class BaseSimulator(ABC):
             
         Initializes the `simin` and `simout` dictionaries of system, species, and transitions objects.
         """
+        system.log.info(f"Setting up solver {self.__class__}...\n")
         self.system = weakref.proxy(system)
 
         self.system.simin = {}

@@ -47,6 +47,7 @@ class ODESolver(BaseSimulator):
         (Re)initialize the simulator by generating the necessary matrices and symbolic expressions, 
         and saving them to the system and species simin dictionaries.
         """
+        
         self._generate_matrices_for_rates_func() 
 
         sp_syms = {name: symbols(name) for name in self.system.species}
@@ -135,7 +136,7 @@ class ODESolver(BaseSimulator):
             for sp_name, coeff in tr.target:
                 rates_sym[self.system.species[sp_name].index] += coeff * unscaled_rate
         self.system.simin["rates_sym"] = rates_sym 
-        self.system.log.info("Entered rates_sym and rates_numk into system simin dict (SYSTEM.simin).\n")
+        self.system.log.info("Saved rates_sym and rates_numk into system simin dict (SYSTEM.simin).")
 
         # Substitute rate constant symbols for values 
         tr_sym2num = {symbols(name): tr.k for name, tr in self.system.transitions.items()}
@@ -145,7 +146,7 @@ class ODESolver(BaseSimulator):
         for sp_name, sp_data in self.system.species.items():
             sp_data.simin["rate_sym"] = self.system.simin["rates_sym"][sp_data.index]
             sp_data.simin["rate_numk"] = self.system.simin["rates_numk"][sp_data.index]
-        self.system.log.info("Entered rate_sym and rate_numk into species simin dict (SYSTEM.species[NAME].simin).\n")
+        self.system.log.info("Saved rate_sym and rate_numk into species simin dict (SYSTEM.species[NAME].simin).")
 
         return 
     
@@ -199,7 +200,7 @@ class ODESolver(BaseSimulator):
                 rate_dict[sp_name].append(f" + {term}")
 
         # Construct the final string
-        rate_log = "Rate's:\n\n"
+        rate_log = "\nRates:\n\n"
         for sp_name, eqn_parts in rate_dict.items():
             # Aligning '+' and '-' symbols
             eqn_header = eqn_parts[0]

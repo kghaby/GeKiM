@@ -374,7 +374,7 @@ class NState:
             sp_data.simout[key_name] = matrix[sp_data.index]
         return
 
-    def find_paths(self, start_species: Union[str, Species], end_species: Union[str, Species], only_linear_paths=True, prob_cutoff=1e-3, max_depth=10):
+    def find_paths(self, start_species: Union[str, Species], end_species: Union[str, Species], only_linear_paths=True, prob_cutoff=1e-9, max_depth=50):
         """
         Find paths from start_species to end_species.
 
@@ -396,6 +396,7 @@ class NState:
         list
             List of Path objects representing the found paths.
         """
+        #TODO: use J_sym?
         def get_transition_probability(transition, current_sp_name):
             # Get total rate for outgoing transitions from current_species
             total_rate = sum(tr.k for tr in self.transitions.values() if current_sp_name in [sp[0] for sp in tr.source])
@@ -416,13 +417,13 @@ class NState:
                         continue
 
                     for next_sp_name in next_species_list:
+                        if next_sp_name in visited_names and only_linear_paths:
+                            continue
                         next_prob = current_prob * get_transition_probability(transition, current_sp_name)
                         visited_names.add(next_sp_name)
                         current_path.append(self.species[next_sp_name])
                         current_transitions.append(transition)
                         dfs(next_sp_name, target_sp_name, visited_names, current_path, current_transitions, next_prob, depth + 1)
-                        #print(visited_names)
-                        #visited_names.remove(next_sp_name)
                         current_path.pop()
                         current_transitions.pop()
 
@@ -433,7 +434,7 @@ class NState:
                 all_linear_tr = False
                 self.log.warning(f"Transition '{transition.name}' is not linear!")
         if not all_linear_tr:
-            self.log.warning("This method only uses TRANSITION.k to calculate probabilities, so they will likely be inaccurate.\n" +
+            self.log.error("This method only uses TRANSITION.k to calculate probabilities, and expects single TRANSITION.source to contain only one species.\n" +
                              "If possible, make all transitions linear (e.g., with a pseudo-first-order approximation).\n")
 
         if isinstance(start_species, str):

@@ -5,7 +5,7 @@ koff = 1/(15*60) #1/15 min converted to s #0.00111111111
 kon = koff/Ki
 concI0,concE0=100,1
 kinactf = 0.01
-kinactb = 0.00#.0000001
+kinactb = 0.0001
 
 schemes = {}
 schemes["3S"] = {
@@ -23,4 +23,4 @@ schemes["3S"] = {
     },
 }
 
-schemes = gk.utils.Plotting.assign_colors_to_species(schemes,saturation_range=(0.5,0.8),lightness_range=(0.4,0.4),offset=0.0,method="GR",overwrite_existing=False)
+schemes = gk.utils.plotting.assign_colors_to_species(schemes,saturation_range=(0.5,0.8),lightness_range=(0.4,0.4),offset=0.0,method="GR",overwrite_existing=False)

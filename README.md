@@ -1,9 +1,7 @@
 # GeKiM (Generalized Kinetic Modeler)
 
 ## Description
-GeKiM (Generalized Kinetic Modeler) is a Python package designed for creating, interpreting, and modeling arbitrary kinetic schemes with a focus on covalent inhibition. Schemes are defined by the user in a dictionary of species and transitions. These are then used to create instances of the NState class, which include methods of simulating and analyzing itself. 
-
-The package also contains classes for common schemes, which come with scheme-specific analyses and metrics (e.g., ThreeState.KI, AXD.jacobian).
+GeKiM (Generalized Kinetic Modeler) is a Python package designed for creating, interpreting, and modeling arbitrary kinetic schemes. Schemes are defined by the user in a dictionary of species and transitions, which is used to initialize an instance of the NState class. Choose (or make) and initialize a simulator for the instance and run it. Included applications are focused on covalent inhibition.
 
 ## Installation
 With pip:
@@ -43,8 +41,9 @@ system = gk.schemes.NState(scheme)
 
 # Choose a simulator and go. In this example we're doing a deterministic 
 # simulation of the concentrations of each species over time.
-system.simulator = gk.simulators.ODESolver(system)
-system.simulator.simulate()
+# Note that `system.simulator() = gk.simulators.ODESolver(system)` may be more doc-hint friendly
+system.set_simulator(gk.simulators.ODESolver)
+system.simulator.simulate() 
 
 # Fit the data to experimental models to extract mock-experimental measurements
 final_state = system.species["EI"].simout["y"]

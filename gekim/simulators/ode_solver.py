@@ -215,8 +215,6 @@ class ODESolver(BaseSimulator):
             print(rate_log)
         return
 
-
-
     def _generate_jac(self,sp_syms):
         """
         Notes
@@ -271,7 +269,7 @@ class ODESolver(BaseSimulator):
             print(J_log_str)
         return
 
-    def simulate(self, t_eval: np.ndarray = None, t_span: tuple = None, method='BDF', rtol=1e-6, atol=1e-8, dense_output=False, output_raw=False, **kwargs):
+    def simulate(self, t_eval: np.ndarray = None, t_span: tuple = None, method='BDF', rtol=1e-3, atol=0, dense_output=False, output_raw=False, **kwargs):
         """
         Solve the differential equations of species concentration wrt time for the system. 
 
@@ -286,9 +284,9 @@ class ODESolver(BaseSimulator):
         method : str, optional
             Integration method, default is 'BDF'.
         rtol : float, optional
-            Relative tolerance for the solver. Default is 1e-6.
+            Relative tolerance for the solver. Default is 1e-3.
         atol : float, optional
-            Absolute tolerance for the solver. Default is 1e-8.
+            Absolute tolerance for the solver. Default is 0. If atol == 0, atol = 1e-6 * <the smallest nonzero value of y0>.
         dense_output : bool, optional
             If True, save a `scipy.integrate._ivp.common.OdeSolution` instance to `SYSTEM.simout.soln_continuous(t)`.
             If using multiple y0's, this will be a list of instances that share indexing with the other outputs,
@@ -319,8 +317,6 @@ class ODESolver(BaseSimulator):
             # Linear scaling of the inverse min eigenvalue underestimates when y0E ~= y0I
             # Linearize system then use normal mode frequency of linear system (1/(sqrt(smallest eigenvalue))?
             # needs to be an n-dimensional function, where n is the degree of (non)linearity
-        #TODO: smarter way to choose rtol and atol. M-scale kon and nM-scale conc cause wild issues that are resolved with changing rtol and atol from default
-            # at least a warning if a weird solution is found 
 
         y0_mat = self._make_y0_mat()
         y0_mat_len = len(y0_mat)
@@ -328,9 +324,14 @@ class ODESolver(BaseSimulator):
 
         solns = []
         for y0 in y0_mat:
+            if atol == 0:
+                atol = np.min(y0[y0 != 0])*1e-6 # smallest nonzero value of the Jacobian
+                self.system.log.info(f"\tSetting atol to {atol:.2e}, 1e-6 * <the smallest nonzero value of y0>.")
+                
             if t_span is None:
                 if t_eval is None:
-                    t_span = self.estimate_t_span(y0)
+                    J0 = self.system.simin["J_func_wrap"](None, y0)
+                    t_span = self.estimate_t_span(J0)
                     self.system.log.info(f"\tEstimated time scale: {t_span[1]:.2e} (1/<rate constant units>)")
                 else:
                     t_span = (t_eval[0], t_eval[-1])
@@ -356,15 +357,15 @@ class ODESolver(BaseSimulator):
             self.system.log.info("Not returning raw solver output. Use output_raw=True to return raw data.\n")
             return
 
-    def estimate_t_span(self, y0: np.ndarray) -> tuple[float, float]:
+    def estimate_t_span(self, J0: np.ndarray) -> tuple[float, float]:
         """
         Estimate the timespan needed for convergence based on the 
         smallest magnitude of the Jacobian eigenvalues at initial conditions
         
         Parameters:
         ----------
-        y0 : np.ndarray
-            The initial conditions of the system
+        J0 : np.ndarray
+            The Jacobian of the initial conditions of the system
         
         Returns:
         -------
@@ -380,7 +381,7 @@ class ODESolver(BaseSimulator):
             If no eigenvalues above the threshold are found, indicating that
             the time scale cannot be estimated.
         """
-        eigenvalues = np.linalg.eigvals(self.system.simin["J_func_wrap"](None, y0))
+        eigenvalues = np.linalg.eigvals(J0)
         eigenvalue_threshold = 1e-6 # below 1e-6 is considered insignificant. float32 cutoff maybe
         filtered_eigenvalues = eigenvalues[np.abs(eigenvalues) > eigenvalue_threshold] 
         if filtered_eigenvalues.size == 0:

@@ -3,10 +3,9 @@ import re
 import copy
 from sympy import symbols
 from typing import Union
+from collections import defaultdict
 from ..utils.helpers import integerable_float
 from ..utils.logging import Logger
-
-#TODO: find_linear_paths in kinetics2 and more general pathfinder in utils?
     
 class Species:
     def __init__(self, name: str, y0: Union[np.ndarray,float], label=None, color=None):
@@ -170,6 +169,8 @@ class Path:
         List of transition objects representing the transitions along the path.
     probability : float
         Probability of the path relative to other paths from `species[0]` to `species[-1]`
+    length : int
+        Length of species_path.
 
     Methods
     -------
@@ -182,6 +183,7 @@ class Path:
         self.species_path = species_path
         self.transitions_path = transitions_path
         self.probability = probability
+        self.length = len(species_path)
 
     def __repr__(self):
         """
@@ -194,13 +196,14 @@ class Path:
 
         """
         path_str = ' -> '.join(['+'.join([sp.name for sp in group]) if isinstance(group, list) else group.name for group in self.species_path])
-        return f"Path({path_str}, Probability: {self.probability})"
+        prob_fmt = "{:.2e}".format(self.probability)
+        return f"Path(Length: {str(self.length).rjust(3)},\tProbability: {prob_fmt},\t{path_str})"
 
 class NState:
-    #TODO: Add stochastic method
-    #TODO: add_species and add_transition methods
+    #TODO: add/remove_species and add/remove_transition methods
+    #TODO: reinits if species or transitions are modified. let user able to define custom rate law funcs 
     #TODO: markovian, nonmarkovian, etc
-    #TODO: is_linear() or get degree of linearity. will loops show up as a degree?
+
     
     def __init__(self, config: dict, logfilename=None, quiet=False):
             """
@@ -375,7 +378,8 @@ class NState:
             sp_data.simout[key_name] = matrix[sp_data.index]
         return
 
-    def find_paths(self, start_species: Union[str, Species], end_species: Union[str, Species], only_linear_paths=True, prob_cutoff=1e-9, max_depth=20):
+    def find_paths(self, start_species: Union[str, Species], end_species: Union[str, Species], only_linear_paths=True, 
+                   prob_cutoff=1e-10, max_depth=20, log_paths=False, normalize_probabilities=True):
         """
         Find paths from start_species to end_species.
 
@@ -388,9 +392,11 @@ class NState:
         only_linear_paths : bool, optional
             Whether to only find linear paths (no backtracking or loops) (default is True).
         prob_cutoff : float, optional
-            Cutoff probability to stop searching current path (default is 1e-9).
+            Cutoff probability to stop searching current path (default is 1e-10). This is before normalization of probabilities.
         max_depth : int, optional
-            Maximum depth to limit the search (default is 20).
+            Maximum depth to limit the search (default is 20), ie max length of path - 1. 
+        log_paths : bool, optional
+            Whether to log the path strings found (default is False).
 
         Notes
         -------
@@ -404,11 +410,11 @@ class NState:
             return transition.k / total_rate if total_rate > 0 else 0
 
         def dfs(current_sp_name, target_sp_name, visited_names, current_path, current_transitions, current_prob, depth):
+            if current_prob < prob_cutoff or depth > max_depth:
+                return
+            
             if current_sp_name == target_sp_name:
                 self.paths.append(Path(current_path[:], current_transitions[:], current_prob))
-                return
-
-            if current_prob < prob_cutoff or depth > max_depth:
                 return
 
             for transition in self.transitions.values():
@@ -454,17 +460,47 @@ class NState:
 
         # Search
         self.paths = []
-        dfs(start_species.name, end_species.name, {start_species.name}, [start_species], [], 1.0, 0)
+        dfs(start_species.name, end_species.name, {start_species.name}, [start_species], [], 1.0, 0) 
 
-        total_prob = sum(path.probability for path in self.paths)
-        if total_prob > 0:
-            for path in self.paths:
-                path.probability /= total_prob
+        # Normalize probabilities
+        if normalize_probabilities:
+            total_prob = sum(path.probability for path in self.paths)
+            if total_prob > 0:
+                for path in self.paths:
+                    path.probability /= total_prob
     
+        # Sort paths by probability
         self.paths.sort(key=lambda p: p.probability, reverse=True)
 
-        self.log.info(f"Paths found from '{start_species.name}' to '{end_species.name}':")
-        for path in self.paths:
-            self.log.info(str(path))
         
-        return self.paths
+        if log_paths:
+            self.log.info(f"\n{len(self.paths)} paths found from '{start_species.name}' to '{end_species.name}':")
+            for path in self.paths:
+                self.log.info(str(path))
+        else:
+            self.log.info(f"\n{len(self.paths)} paths found from '{start_species.name}' to '{end_species.name}'")
+        
+        return 
+
+    def get_species_sets(self) -> dict:
+        """
+        Combine the probabilities of self.paths that contain the same set of species.
+
+        Returns
+        -------
+        dict
+            Dictionary with species sets as keys and combined probabilities as values.
+        """
+        paths = self.paths
+        combined_paths = defaultdict(lambda: {"combined_probability": 0.0})
+
+        for path in paths:
+            species_set = frozenset(sp.name for sp in path.species_path)
+            combined_paths[species_set]["combined_probability"] += path.probability
+
+        self.log.info(f"\nSpecies sets and their combined probabilities:")
+        for species_set, data in combined_paths.items():
+            prob_fmt = "{:.2e}".format(data['combined_probability'])
+            self.log.info(f"Combined P: {prob_fmt}, Species: {species_set}")
+
+        return combined_paths

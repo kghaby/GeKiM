@@ -1,7 +1,7 @@
 import numpy as np
 import math
 
-#TODO: pathfinder that counts and lists all possible paths between two species
+
 
 def rate_pair_from_P(int_OOM,P_B) -> tuple:
     """
@@ -135,4 +135,5 @@ def compare_dictionaries(dict1, dict2, rel_tol=1e-9, abs_tol=0.0):
             if not np.allclose(arr1, arr2, rtol=rel_tol, atol=abs_tol):
                 return False
     return True
+
 

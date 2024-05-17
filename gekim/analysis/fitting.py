@@ -1,22 +1,21 @@
 import numpy as np
 import inspect
 from sympy import symbols, Matrix, lambdify
-#TODO: scheme fitting
-#TODO: gaussian_kde from scipy.stats for reweighting unevenly spaced data points
+#TODO: scheme fitting, rate constant fitting
 
-def chi_squared(observed_data, fitted_data, fitted_params, variances=None, reduced=False):
+def chi_squared(observed_data: np.ndarray, fitted_data: np.ndarray, fitted_params: np.ndarray, variances: np.ndarray = None, reduced=False):
     """
     Calculate the chi-squared and optionally the reduced chi-squared statistics.
 
     Parameters
     ----------
-    observed_data : np.array
+    observed_data : np.ndarray
         The observed data points.
-    fitted_data : np.array
+    fitted_data : np.ndarray
         The fitted data points obtained from curve 
-    fitted_params : list or np.array
+    fitted_params : list or np.ndarray
         The optimal parameters obtained from curve 
-    variances : np.array, optional
+    variances : np.ndarray, optional
         Variances of the observed data points. If None, assume constant variance.
     reduced : bool, optional
         If True, calculate and return the reduced chi-squared.
@@ -58,7 +57,7 @@ def _extract_fit_info(params):
             param_order.append(param)
     return p0, bounds, param_order, fixed_params
 
-class _FitOutput:
+class FitOutput:
     """
     Comprises the output of a fitting operation.
 
@@ -77,7 +76,7 @@ class _FitOutput:
     reduced_chi_sq : float
         Reduced chi-squared value indicating goodness of fit.
     """
-    def __init__(self, fitted_params, pcov, x, fitted_ydata, observed_ydata, reduced_chi_sq):
+    def __init__(self, x, fitted_ydata, observed_ydata, fitted_params, pcov, reduced_chi_sq):
         self.fitted_params = fitted_params
         self.pcov = pcov
         self.x = x
@@ -85,13 +84,13 @@ class _FitOutput:
         self.y_obs = observed_ydata
         self.reduced_chi_sq = reduced_chi_sq
 
-def _prepare_output(popt, pcov, param_order, x, fitted_ydata, observed_ydata):
+def _prepare_output(x, fitted_ydata, observed_ydata, popt, pcov, param_order):
     """
     Prepare the fitting output as an instance of the FitOutput class.
     """
     fitted_params = dict(zip(param_order, popt))
     reduced_chi_sq = chi_squared(observed_ydata, fitted_ydata, popt, np.var(observed_ydata), reduced=True)
-    return _FitOutput(fitted_params, pcov, x, fitted_ydata, observed_ydata, reduced_chi_sq)
+    return FitOutput(x, fitted_ydata, observed_ydata, fitted_params, pcov, reduced_chi_sq)
 
 def generate_jacobian_func(fitting_adapter, param_order):
     '''
@@ -136,7 +135,7 @@ def _normalize_params(params: dict, norm_factor: float,names: list) -> dict:
             params[name]["fix"] = params[name]["fix"]/norm_factor
         else:
             params[name]["guess"] = params[name]["guess"]/norm_factor
-            params[name]["bounds"] = (params[name]["bounds"][0]/norm_factor,params["Etot"]["bounds"][1]/norm_factor)
+            params[name]["bounds"] = (params[name]["bounds"][0]/norm_factor,params[name]["bounds"][1]/norm_factor)
     return params
 
 def _unnormalize_popt(popt,param_order,norm_factor,names):
@@ -144,3 +143,65 @@ def _unnormalize_popt(popt,param_order,norm_factor,names):
         index = param_order.index(name)
         popt[index] = popt[index]*norm_factor
     return popt
+
+def calc_weights_dt(t: np.ndarray):
+    """
+    Calculate weights as the inverse of the differences in time points
+
+    Parameters
+    ----------
+    t : np.ndarray
+        Array of time points.
+
+    Returns
+    -------
+    weights : np.ndarray
+        Array of weights. May be used as sigma in fitting functions.
+    """
+    # 
+    dt = np.diff(t, prepend=t[1]-t[0])
+    weights = 1 / dt
+    weights /= np.sum(weights)  # Normalize 
+    return weights
+
+def detect_bad_fit(fitted_data, y_obs, popt, pcov, param_bounds, param_order):
+    bad = False
+    message = ""
+
+    # Check for constant output
+    atol = 1e-10
+    if np.allclose(fitted_data, fitted_data[0],atol=atol):
+        bad = True
+        message += f"\n\tModel fit y-values were all within {atol:.2e} of eachother."
+
+    # Residual analysis
+    residuals = y_obs - fitted_data
+    if np.any(np.abs(residuals) > 10 * np.std(y_obs)):
+        bad = True
+        message += "\n\tResiduals are too large."
+
+    # Check if parameters are at bounds
+    for i, param in enumerate(popt):
+        lower_bound, upper_bound = param_bounds[0][i], param_bounds[1][i]
+        if np.isclose(param, lower_bound) or np.isclose(param, upper_bound):
+            bad = True
+            message += f"\n\tParameter {param_order[i]} is at or near its bound."
+
+    # Check standard errors
+    param_errors = np.sqrt(np.diag(pcov))
+    if np.any(param_errors > np.abs(popt)):
+        bad = True
+        message += "\n\tLarge standard errors relative to parameter values (note that this could be due to absolute_sigma=True if you used this kwarg for curve_fit):"
+        for i,param in enumerate(param_order):
+            if param_errors[i] > np.abs(popt[i]):
+                message += f"\n\t\t{param}: {popt[i]:.2e} ± {param_errors[i]:.2e}"
+
+    # Check R^2
+    ss_res = np.sum(residuals**2)
+    ss_tot = np.sum((y_obs - np.mean(y_obs))**2)
+    r_squared = 1 - (ss_res / ss_tot)
+    if r_squared < 0.5:
+        bad = True
+        message += f"\n\tLow R² value: {r_squared:.2e}"
+
+    return bad, message

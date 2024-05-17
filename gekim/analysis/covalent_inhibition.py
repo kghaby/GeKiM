@@ -1,12 +1,12 @@
 import numpy as np
 from scipy.optimize import curve_fit
+from scipy.stats import gaussian_kde
 from ..utils.helpers import update_dict_with_subset
-from . import fitting
+from .fitting import detect_bad_fit, FitOutput, _normalize_params, _unnormalize_popt, _extract_fit_info, _prepare_output
 
 #TODO: fit to scheme. meaning yuo make a scheme without values for the transitions and fit it to occ data to see what values of rates satisfy curve
 #TODO: detect trivial solutions for curve fitting, like if all values are the same, or if all values are 0, or if all values are 1.
 #TODO: time arrays that are not evenly spaced will hurt curve fitting.
-#TODO: accept dense output so a custom time array can be passed. this will help with starts misrepresenting the fit like for total occ not getting the right KI 
 #TODO: refactor fitting. kobs fitting shares lots
 
 def occ_final_wrt_t(t,kobs,Etot,uplim=1):
@@ -31,7 +31,8 @@ def occ_final_wrt_t(t,kobs,Etot,uplim=1):
     '''
     return uplim*Etot*(1-np.e**(-kobs*t))
 
-def kobs_uplim_fit_to_occ_final_wrt_t(t: np.ndarray, occ_final: np.ndarray, nondefault_params: dict = None, xlim=None, normalize_for_fit=True, **kwargs): 
+def kobs_uplim_fit_to_occ_final_wrt_t(t: np.ndarray, occ_final: np.ndarray, nondefault_params: dict = None, xlim: tuple = None, 
+                                      normalize_for_fit=True, sigma_kde=False, sigma=None, **kwargs) -> FitOutput: 
     '''
     Fit kobs to the first order occupancy over time.
 
@@ -59,6 +60,11 @@ def kobs_uplim_fit_to_occ_final_wrt_t(t: np.ndarray, occ_final: np.ndarray, nond
     normalize_for_fit : bool, optional
         If True, normalize the observed data and relevant params by dividing by the maximum value before fitting. 
         Will still return unnormalized values. Default is True.
+    sigma_kde : bool, optional
+        If True, calculate the density of the x-values and use that for sigma (uncertainty) in the curve_fitting. 
+        Helps distribute weight over unevenly-spaced points. Default is False.
+    sigma : np.ndarray, optional
+        sigma parameter for curve_fit. This argument is overridden if sigma_kde=True. Default is None.
     kwargs : dict, optional
         Additional keyword arguments to pass to the curve_fit function.
 
@@ -96,33 +102,44 @@ def kobs_uplim_fit_to_occ_final_wrt_t(t: np.ndarray, occ_final: np.ndarray, nond
         norm_factor = occ_final.max()
         occ_final_unnorm = occ_final
         occ_final = occ_final/norm_factor
-        params = fitting._normalize_params(params,norm_factor,["Etot"])
+        params = _normalize_params(params,norm_factor,["Etot"])
 
-    p0, bounds, param_order, fixed_params = fitting._extract_fit_info(params)
+    p0, bounds, param_order, fixed_params = _extract_fit_info(params)
 
     if xlim:
         indices = (t >= xlim[0]) & (t <= xlim[1])
         t = t[indices]
         occ_final = occ_final[indices]
+    
+    if sigma_kde:
+        kde = gaussian_kde(t)
+        sigma = kde(t) 
+    else:
+        sigma = sigma
 
     def fitting_adapter(t, *fitting_params):
         all_params = {**fixed_params, **dict(zip(param_order, fitting_params))}
         return occ_final_wrt_t(t,all_params["kobs"],all_params["Etot"],uplim=all_params["uplim"])
     
     #jac_func = fitting.generate_jacobian_func(fitting_adapter, param_order) #makes curve_fit almost 2x slower 
-    popt, pcov = curve_fit(fitting_adapter, t, occ_final, p0=p0, bounds=bounds, **kwargs)
+    popt, pcov = curve_fit(fitting_adapter, t, occ_final, p0=p0, bounds=bounds, sigma=sigma, **kwargs)
 
     # Unnorm occ_final and params
     if normalize_for_fit:
         occ_final = occ_final_unnorm
         for param in ["Etot"]:
             if param in param_order:
-                popt = fitting._unnormalize_popt(popt,param_order,norm_factor,[param])
+                popt = _unnormalize_popt(popt,param_order,norm_factor,[param])
             elif param in fixed_params:
                 fixed_params[param] = fixed_params[param]*norm_factor
     
     fitted_data = fitting_adapter(t, *popt)
-    fit_output = fitting._prepare_output(popt, pcov, param_order, t, fitted_data, occ_final)
+    fit_output = _prepare_output(t, fitted_data, occ_final, popt, pcov, param_order)
+
+    bad_fit, message = detect_bad_fit(fitted_data, occ_final, popt, pcov, bounds, param_order)
+    if bad_fit:
+        print(f"Bad fit detected:{message}")
+        print(f"\tFitted params: {fit_output.fitted_params}\n")
 
     return fit_output
 
@@ -158,7 +175,8 @@ def occ_total_wrt_t(t,kobs,concI0,KI,Etot,uplim=1):
     FO = 1/(1+(KI/concI0)) # Equilibrium occupancy of reversible portion
     return uplim*Etot*(1-(1-FO)*(np.e**(-kobs*t)))
 
-def kobs_KI_uplim_fit_to_occ_total_wrt_t(t: np.ndarray, occ_tot: np.ndarray, nondefault_params: dict = None, xlim=None, normalize_for_fit=True,**kwargs): 
+def kobs_KI_uplim_fit_to_occ_total_wrt_t(t: np.ndarray, occ_tot: np.ndarray, nondefault_params: dict = None, xlim: tuple = None, 
+                                         normalize_for_fit=True, sigma_kde=False, sigma=None, **kwargs) -> FitOutput: 
     '''
     Fit kobs and KI to the total occupancy of all bound states over time, 
     assuming fast reversible binding equilibrated at t=0.
@@ -191,6 +209,11 @@ def kobs_KI_uplim_fit_to_occ_total_wrt_t(t: np.ndarray, occ_tot: np.ndarray, non
     normalize_for_fit : bool, optional
         If True, normalize the observed data and relevant params by dividing by the maximum value before fitting. 
         Will still return unnormalized values. Default is True.
+    sigma_kde : bool, optional
+        If True, calculate the density of the x-values and use that for sigma (uncertainty) in the curve_fitting. 
+        Helps distribute weight over unevenly-spaced points. Default is False.
+    sigma : np.ndarray, optional
+        sigma parameter for curve_fit. This argument is overridden if sigma_kde=True. Default is None.
     kwargs : dict, optional
         Additional keyword arguments to pass to the curve_fit function.
 
@@ -219,33 +242,45 @@ def kobs_KI_uplim_fit_to_occ_total_wrt_t(t: np.ndarray, occ_tot: np.ndarray, non
         norm_factor = occ_tot.max()
         occ_tot_unnorm = occ_tot
         occ_tot = occ_tot/norm_factor
-        params = fitting._normalize_params(params,norm_factor,["Etot"])
+        params = _normalize_params(params,norm_factor,["Etot"])
     
-    p0, bounds, param_order, fixed_params = fitting._extract_fit_info(params)
+    p0, bounds, param_order, fixed_params = _extract_fit_info(params)
 
     if xlim:
         indices = (t >= xlim[0]) & (t <= xlim[1])
         t = t[indices]
         occ_tot = occ_tot[indices]
 
+    if sigma_kde:
+        kde = gaussian_kde(t)
+        sigma = kde(t) 
+    else:
+        sigma = sigma
+
+        
     def fitting_adapter(t, *fitting_params):
         all_params = {**fixed_params, **dict(zip(param_order, fitting_params))}
         return occ_total_wrt_t(t,all_params["kobs"],all_params["concI0"],all_params["KI"],all_params["Etot"],uplim=all_params["uplim"])
 
-    popt, pcov = curve_fit(fitting_adapter, t, occ_tot, p0=p0, bounds=bounds,**kwargs)
+    popt, pcov = curve_fit(fitting_adapter, t, occ_tot, p0=p0, bounds=bounds, sigma=sigma, **kwargs)
 
     # Unnorm occ and params
     if normalize_for_fit:
         occ_tot = occ_tot_unnorm
         for param in ["Etot"]:
             if param in param_order:
-                popt = fitting._unnormalize_popt(popt,param_order,norm_factor,[param])
+                popt = _unnormalize_popt(popt,param_order,norm_factor,[param])
             elif param in fixed_params:
                 fixed_params[param] = fixed_params[param]*norm_factor
     
     fitted_data = fitting_adapter(t, *popt)
-    fit_output = fitting._prepare_output(popt, pcov, param_order, t, fitted_data, occ_tot)
-
+    fit_output = _prepare_output(t, fitted_data, occ_tot, popt, pcov, param_order,)
+    
+    bad_fit, message = detect_bad_fit(fitted_data, occ_tot, popt, pcov, bounds, param_order)
+    if bad_fit:
+        print(f"Bad fit detected:{message}")
+        print(f"\tFitted params: {fit_output.fitted_params}\n")
+    
     return fit_output   
 
 def kobs_wrt_concI0(concI0,KI,kinact,n=1): 
@@ -272,7 +307,8 @@ def kobs_wrt_concI0(concI0,KI,kinact,n=1):
     '''
     return kinact/(1+(KI/concI0)**n)
 
-def KI_kinact_n_fit_to_kobs_wrt_concI0(concI0: np.ndarray, kobs: np.ndarray, nondefault_params: dict = None, xlim=None,**kwargs):
+def KI_kinact_n_fit_to_kobs_wrt_concI0(concI0: np.ndarray, kobs: np.ndarray, nondefault_params: dict = None, xlim: tuple = None,
+                                       normalize_for_fit=True, sigma_kde=False, sigma=None, **kwargs) -> FitOutput: 
     """
     Fit parameters (KI, kinact, n) to kobs with respect to concI0 using 
     a structured dictionary for parameters.
@@ -296,6 +332,14 @@ def KI_kinact_n_fit_to_kobs_wrt_concI0(concI0: np.ndarray, kobs: np.ndarray, non
         ```
     xlim : tuple, optional
         Limits for the concI0 points considered in the fit (min_concI0, max_concI0).
+    normalize_for_fit : bool, optional
+        If True, normalize the observed data and relevant params by dividing by the maximum value before fitting. 
+        Will still return unnormalized values. Default is True.
+    sigma_kde : bool, optional
+        If True, calculate the density of the x-values and use that for sigma (uncertainty) in the curve_fitting. 
+        Helps distribute weight over unevenly-spaced points. Default is False.
+    sigma : np.ndarray, optional
+        sigma parameter for curve_fit. This argument is overridden if sigma_kde=True. Default is None.
     kwargs : dict, optional
         Additional keyword arguments to pass to the curve_fit function.    
     
@@ -318,21 +362,48 @@ def KI_kinact_n_fit_to_kobs_wrt_concI0(concI0: np.ndarray, kobs: np.ndarray, non
     if nondefault_params is not None:
         params = update_dict_with_subset(params, nondefault_params)
 
-    p0, bounds, param_order, fixed_params = fitting._extract_fit_info(params)
+    if normalize_for_fit:
+        norm_factor = kobs.max()
+        kobs_unnorm = kobs
+        kobs = kobs/norm_factor
+        params = _normalize_params(params,norm_factor,["kinact"])
+
+    p0, bounds, param_order, fixed_params = _extract_fit_info(params)
 
     if xlim:
         indices = (concI0 >= xlim[0]) & (concI0 <= xlim[1])
         concI0 = concI0[indices]
         kobs = kobs[indices]
 
+    if sigma_kde:
+        kde = gaussian_kde(concI0)
+        sigma = kde(concI0) 
+    else:
+        sigma = sigma
+
     def fitting_adapter(concI0, *fitting_params):
         all_params = {**fixed_params, **dict(zip(param_order, fitting_params))}
         return kobs_wrt_concI0(concI0, all_params["KI"], all_params["kinact"], all_params["n"])
 
-    popt, pcov = curve_fit(fitting_adapter, concI0, kobs, p0=p0, bounds=bounds,**kwargs)
+    popt, pcov = curve_fit(fitting_adapter, concI0, kobs, p0=p0, bounds=bounds, sigma=sigma, **kwargs)
+        
+    # Unnorm kobs and params
+    if normalize_for_fit:
+        kobs = kobs_unnorm
+        for param in ["kinact"]:
+            if param in param_order:
+                popt = _unnormalize_popt(popt,param_order,norm_factor,[param])
+            elif param in fixed_params:
+                fixed_params[param] = fixed_params[param]*norm_factor
+            
     fitted_data = fitting_adapter(concI0, *popt)
-    fit_output = fitting._prepare_output(popt, pcov, param_order, concI0, fitted_data, kobs)
-
+    fit_output = _prepare_output(concI0, fitted_data, kobs, popt, pcov, param_order)
+    
+    bad_fit, message = detect_bad_fit(fitted_data, kobs, popt, pcov, bounds, param_order)
+    if bad_fit:
+        print(f"Bad fit detected:{message}")
+        print(f"\tFitted params: {fit_output.fitted_params}\n")
+    
     return fit_output
 
 class Parameters:

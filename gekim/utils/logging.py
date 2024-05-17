@@ -2,6 +2,8 @@ from datetime import datetime
 import sys 
 
 class Logger:
+    #TODO: add history with tags of the method that made those, eg system.log.history['simulator']
+    #TODO: format log to have method: message
     def __init__(self, quiet=False, logfilename=None):
         self.quiet = quiet
         self.logfilename = logfilename

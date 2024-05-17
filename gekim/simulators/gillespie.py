@@ -1,10 +1,9 @@
 import numpy as np
 from .base_simulator import BaseSimulator
 
-        #TODO: Although i do like the idea of being able to continue from a previous run, so add an option called "continue" which takes an integer which points to the index of the run that its continuing from
-        #TODO: show pop dist is like rates
-        # Initialize
-        #TODO: S2.alt1 breaks this from negative rates somehow
+    #TODO: add an option called "continue" which takes an integer which points to the index of the run that its continuing from
+    #TODO: precompile algo
+    #TODO: S2.alt1 breaks this from negative rates somehow
     #TODO: running prob? and test more
     #TODO: type hints on algo
     #TODO: 2S I goes neg

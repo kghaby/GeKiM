@@ -291,7 +291,7 @@ class ODESolver(BaseSimulator):
             If True, save a `scipy.integrate._ivp.common.OdeSolution` instance to `SYSTEM.simout.soln_continuous(t)`.
             If using multiple y0's, this will be a list of instances that share indexing with the other outputs,
             and can be called like `SYSTEM.simout['soln_continuous'][idx](t)`.
-            Access a specific species conc like `soln_continuous(t)[SYSTEM.species[NAME].index]`.
+            Access a specific species conc like `SYSTEM.simout['soln_continuous'](t)[SYSTEM.species[NAME].index]`.
         **kwargs : dict, optional
             Additional keyword arguments to pass to the solver.
 

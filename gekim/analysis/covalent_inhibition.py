@@ -3,8 +3,8 @@ from scipy.optimize import curve_fit
 from ..utils.helpers import update_dict_with_subset
 from . import fitting
 
-# TODO: fit to scheme. meaning yuo make a scheme without values for the transitions and fit it to occ data to see what values of rates satisfy curve
-# TODO: detect trivial solutions for curve fitting, like if all values are the same, or if all values are 0, or if all values are 1.
+#TODO: fit to scheme. meaning yuo make a scheme without values for the transitions and fit it to occ data to see what values of rates satisfy curve
+#TODO: detect trivial solutions for curve fitting, like if all values are the same, or if all values are 0, or if all values are 1.
 #TODO: time arrays that are not evenly spaced will hurt curve fitting.
 #TODO: accept dense output so a custom time array can be passed. this will help with starts misrepresenting the fit like for total occ not getting the right KI 
 #TODO: refactor fitting. kobs fitting shares lots

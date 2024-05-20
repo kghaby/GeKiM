@@ -404,6 +404,7 @@ class NState:
             
         """
         #TODO: use J_sym?
+        #TODO: prob calc maybe wrong bc doesnt properly reset prob after finding path
         
         def get_transition_probability(transition, current_sp_name):
             total_rate = sum(tr.k for tr in self.transitions.values() if current_sp_name in [sp[0] for sp in tr.source])

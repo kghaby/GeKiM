@@ -9,7 +9,7 @@ With pip:
 pip install gekim
 ```
 
-Or directly from the source code:
+Or directly from the source code (recommended):
 ```bash
 git clone https://github.com/kghaby/GeKiM.git
 cd GeKiM
@@ -57,16 +57,13 @@ print(f"Fit: {fit_output.fitted_params}\n")
 For more detailed examples, please refer to the examples directory.
 
 ## Documentation
-API Documentation with examples will be done eventually.
+Documentation and example notebook(s) are pending.
 
 ## Contributing
 If you have suggestions or want to contribute code, please feel free to open an issue or a pull request.
 
 ## License
-GeKiM is licensed under the GPL-3.0 license.
+GeKiM is licensed under the GPL-3.0.
 
 ## Contact
 kyleghaby@gmail.com
-
-## TODO
-so much

@@ -401,14 +401,21 @@ class NState:
         Notes
         -------
         Saves a list of paths in `self.paths` sorted by probability.
+
+        Probability may be misleading here due to the cutoffs and infinite possibilities of nonlinear paths. 
+            
+        Probability is calculated as the product of the transition probabilities, 
+            which is the transition rate constant over the sum of available transition rate constants (markov chain-esque)
             
         """
         #TODO: use J_sym?
         #TODO: prob seems right, but why isnt it what is expected?
+        #TODO: needs to be optimized, probably with multithreading. but since its main use is for finding linear systems, its fine
+            #TODO: needs to be optimized in many ways, including algorithmic. Many wasted or repeat cycles  
         
         def get_transition_probability(transition, current_sp_name):
-            total_rate = sum(tr.k for tr in self.transitions.values() if current_sp_name in [sp[0] for sp in tr.source])
-            return transition.k / total_rate if total_rate > 0 else 0
+            k_sum = sum(tr.k for tr in self.transitions.values() if current_sp_name in [sp[0] for sp in tr.source])
+            return transition.k / k_sum if k_sum > 0 else 0
 
         def dfs(current_sp_name, target_sp_name, visited_names, current_path, current_transitions, current_prob, depth):
             if current_prob < prob_cutoff or depth > max_depth:
@@ -426,6 +433,7 @@ class NState:
 
                     for next_sp_name in next_species_list:
                         next_prob = current_prob * get_transition_probability(transition, current_sp_name)
+                        #print(f"{current_sp_name} -> {next_sp_name} ({current_prob}->{next_prob}) by transition {transition.name}")
                         visited_names.add(next_sp_name)
                         current_path.append(self.species[next_sp_name])
                         current_transitions.append(transition)
@@ -499,9 +507,12 @@ class NState:
             species_set = frozenset(sp.name for sp in path.species_path)
             combined_paths[species_set]["combined_probability"] += path.probability
 
-        self.log.info(f"\nSpecies sets and their combined probabilities:")
-        for species_set, data in combined_paths.items():
+        # Sort combined paths by combined probability
+        sorted_combined_paths = dict(sorted(combined_paths.items(), key=lambda item: item[1]['combined_probability'], reverse=True))
+
+        self.log.info(f"\nSpecies sets and their combined probabilities (sorted):")
+        for species_set, data in sorted_combined_paths.items():
             prob_fmt = "{:.2e}".format(data['combined_probability'])
             self.log.info(f"Combined P: {prob_fmt}, Species: {species_set}")
 
-        return combined_paths
+        return sorted_combined_paths

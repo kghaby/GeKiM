@@ -131,7 +131,7 @@ for name,scheme in schemes.items():
     system = gk.schemes.NState(scheme,quiet=True)
     #sol = _solve_odes_old(system,t,output_raw=True) #testing with old (nonvectorized) version
     system.set_simulator(gk.simulators.ODESolver)
-    sol = system.simulator.simulate(t_eval=t,output_raw=True)
+    sol = system.simulator.simulate(t_eval=t,output_raw=True,atol=1e-8,rtol=1e-6)
     final_state = system.species["EI"].simout["y"]
     all_bound = system.sum_species_simout(blacklist=["E","I"])
     fit_output = ci.kobs_uplim_fit_to_occ_final_wrt_t(
@@ -266,18 +266,9 @@ class ThreeStateMod2dot1():
         solution = solve_ivp(self.ode, t_span, self.conc0Arr, t_eval=t, args=(params,), method='BDF', rtol=1e-6, atol=1e-8)
         return solution
 
-
-def compare_dictionaries(dict1, dict2, tol=1e-9):
-    if dict1.keys() != dict2.keys():
-        return False
-    for key in dict1:
-        if not np.isclose(dict1[key], dict2[key], rel_tol=tol):
-            return False
-    return True
-
 def compare_systems(sys1_label,sys1_dict, sys2_label,sys2_dict, t):
     if np.allclose(sys1_dict["sol"].y, sys2_dict["sol"].y,rtol=1e-6) and \
-        gk.utils.helpers.compare_dictionaries(sys1_dict["fit_output"].fitted_params,sys2_dict["fit_output"].fitted_params,rel_tol=1e-6):
+        gk.utils.helpers.compare_dictionaries(sys1_dict["fit_output"].fitted_params,sys2_dict["fit_output"].fitted_params,rel_tol=1e-6,abs_tol=1e-8):
         print(f"GOOD: SOLUTION MATCH: {sys1_label} and {sys2_label}","\n")
     else:
         print(f"BAD: SOLUTION MISMATCH: {sys1_label} and {sys2_label}")

@@ -2,13 +2,12 @@ import numpy as np
 import re
 import copy
 from sympy import symbols
-from typing import Union
 from collections import defaultdict
 from ..utils.helpers import integerable_float
 from ..utils.logging import Logger
     
 class Species:
-    def __init__(self, name: str, y0: Union[np.ndarray,float], label=None, color=None):
+    def __init__(self, name: str, y0: np.ndarray | float, label=None, color=None):
             """
             Initialize a species object.
 
@@ -16,7 +15,7 @@ class Species:
             ----------
             name : str
                 Name of the species.
-            y0 : Union[np.ndarray, float]
+            y0 : np.ndarray | float
                 Initial concentration of the species.
                 Array Example: `{"Ligand":np.linspace(1,1500,100)}` for a Michaelis-Menten ligand concentration scan.
             label : str, optional
@@ -378,7 +377,7 @@ class NState:
             sp_data.simout[key_name] = matrix[sp_data.index]
         return
 
-    def find_paths(self, start_species: Union[str, Species], end_species: Union[str, Species], only_linear_paths=True, 
+    def find_paths(self, start_species: str | Species, end_species: str | Species, only_linear_paths=True, 
                    prob_cutoff=1e-10, max_depth=20, log_paths=False, normalize_prob=True):
         """
         Find paths from start_species to end_species.
@@ -494,6 +493,7 @@ class NState:
     def get_species_sets(self) -> dict:
         """
         Combine the probabilities of self.paths that contain the same set of species.
+        Essentially a utility function if `NState.find_paths()` yields a ton of paths.
 
         Returns
         -------

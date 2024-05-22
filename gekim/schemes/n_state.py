@@ -379,7 +379,7 @@ class NState:
         return
 
     def find_paths(self, start_species: Union[str, Species], end_species: Union[str, Species], only_linear_paths=True, 
-                   prob_cutoff=1e-10, max_depth=20, log_paths=False, normalize_probabilities=True):
+                   prob_cutoff=1e-10, max_depth=20, log_paths=False, normalize_prob=True):
         """
         Find paths from start_species to end_species.
 
@@ -404,7 +404,7 @@ class NState:
             
         """
         #TODO: use J_sym?
-        #TODO: prob calc maybe wrong bc doesnt properly reset prob after finding path
+        #TODO: prob seems right, but why isnt it what is expected?
         
         def get_transition_probability(transition, current_sp_name):
             total_rate = sum(tr.k for tr in self.transitions.values() if current_sp_name in [sp[0] for sp in tr.source])
@@ -464,7 +464,7 @@ class NState:
         dfs(start_species.name, end_species.name, {start_species.name}, [start_species], [], 1.0, 0) 
 
         # Normalize probabilities
-        if normalize_probabilities:
+        if normalize_prob:
             total_prob = sum(path.probability for path in self.paths)
             if total_prob > 0:
                 for path in self.paths:

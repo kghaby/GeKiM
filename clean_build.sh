@@ -7,3 +7,6 @@ find . -name '*.egg-info' -exec rm -rf {} +
 
 # build
 python -m build
+
+# upload
+# twine upload dist/*

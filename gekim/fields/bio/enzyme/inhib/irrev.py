@@ -1,8 +1,8 @@
 import numpy as np
 from scipy.optimize import curve_fit
 from scipy.stats import gaussian_kde
-from ..utils.helpers import update_dict_with_subset
-from .fitting import detect_bad_fit, FitOutput, _normalize_params, _unnormalize_popt, _extract_fit_info, _prepare_output
+from .....utils.helpers import update_dict_with_subset
+from .....utils.fitting import detect_bad_fit, FitOutput, _normalize_params, _unnormalize_popt, _extract_fit_info, _prepare_output
 
 #TODO: fit to scheme. meaning yuo make a scheme without values for the transitions and fit it to occ data to see what values of rates satisfy curve
 #TODO: detect trivial solutions for curve fitting, like if all values are the same, or if all values are 0, or if all values are 1.

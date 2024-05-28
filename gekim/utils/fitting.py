@@ -1,6 +1,10 @@
 import numpy as np
 import inspect
 from sympy import symbols, Matrix, lambdify
+from scipy.optimize import curve_fit
+from scipy.stats import gaussian_kde
+from .helpers import update_dict_with_subset
+
 #TODO: scheme fitting, rate constant fitting
 
 def chi_squared(observed_data: np.ndarray, fitted_data: np.ndarray, fitted_params: np.ndarray, variances: np.ndarray = None, reduced=False):
@@ -205,3 +209,25 @@ def detect_bad_fit(fitted_data, y_obs, popt, pcov, param_bounds, param_order):
         message += f"\n\tLow R² value: {r_squared:.2e}"
 
     return bad, message
+
+def calc_nrmse(y_exp: np.ndarray, y_pred: np.ndarray):
+    """
+    Calculate the Normalized Root Mean Squared Error (NRMSE) between two arrays.
+
+    Parameters
+    ----------
+    y_exp : np.ndarray
+        Array of experimental values.
+    y_pred : np.ndarray
+        Array of predicted values.
+
+    Returns
+    -------
+    float
+        NRMSE value between 0 and 1, where 1 is a perfect match.
+    """
+    mse = np.mean((y_exp - y_pred) ** 2)
+    rmse = np.sqrt(mse)
+    range_y = np.ptp(y_exp)  # Equivalent to max(y_exp) - min(y_exp)
+    nrmse = 1 - rmse / range_y
+    return nrmse

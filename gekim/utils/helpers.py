@@ -1,6 +1,6 @@
 import numpy as np
 import math
-
+from itertools import product
 
 
 def rate_pair_from_P(int_OOM,P_B) -> tuple:
@@ -35,7 +35,7 @@ def integerable_float(num):
     else:
         return num
     
-def round_sig(num, sig_figs, autoformat=True):
+def round_sig(num: float, sig_figs: int = 3, autoformat=True):
     """
     Round up using significant figures.
 
@@ -137,3 +137,28 @@ def compare_dictionaries(dict1, dict2, rel_tol=1e-9, abs_tol=0.0):
     return True
 
 
+
+def generate_dictval_combinations(input_dict: dict):
+    """
+    Generate all combinations of values in a dictionary and return them as a dictionary
+    with the original keys and numpy arrays of corresponding values.
+
+    Parameters
+    ----------
+    input_dict : dict
+        Keys are parameter names and values are numpy arrays.
+
+    Returns
+    -------
+    dict
+        Dictionary with the original keys and numpy arrays of corresponding value
+    """
+
+    names = list(input_dict.keys())
+    values = list(input_dict.values())
+
+    combinations = list(product(*values))
+    combinations_array = np.array(combinations).T
+
+    comb_dict = {name: combinations_array[i] for i, name in enumerate(names)}
+    return comb_dict

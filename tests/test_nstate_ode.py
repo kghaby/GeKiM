@@ -1,5 +1,5 @@
 import gekim as gk
-import gekim.analysis.covalent_inhibition as ci
+from gekim.fields.bio.enzyme.inhib import irrev as ii 
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.integrate import solve_ivp
@@ -134,7 +134,7 @@ for name,scheme in schemes.items():
     sol = system.simulator.simulate(t_eval=t,output_raw=True,atol=1e-8,rtol=1e-6)
     final_state = system.species["EI"].simout["y"]
     all_bound = system.sum_species_simout(blacklist=["E","I"])
-    fit_output = ci.kobs_uplim_fit_to_occ_final_wrt_t(
+    fit_output = ii.kobs_uplim_fit_to_occ_final_wrt_t(
         t,final_state,nondefault_params={"Etot":{"fix":concE0}})
     schemes[name]["fit_output"] = fit_output
     schemes[name]["sol"] = sol
@@ -302,7 +302,7 @@ def compare_systems(sys1_label,sys1_dict, sys2_label,sys2_dict, t):
 def solve_system(system,t,concE0):
     sol = system.solve(t)
     final_state = sol.y[-1]
-    fit_output = ci.kobs_uplim_fit_to_occ_final_wrt_t(
+    fit_output = ii.kobs_uplim_fit_to_occ_final_wrt_t(
         t,final_state,nondefault_params={"Etot":{"fix":concE0}})
     system_dict = {
         "system": system,

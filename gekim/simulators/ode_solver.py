@@ -50,16 +50,13 @@ class ODESolver(BaseSimulator):
         
         self._generate_matrices_for_rates_func() 
 
-        sp_syms = {name: symbols(name) for name in self.system.species}
-        tr_syms = {name: symbols(name) for name in self.system.transitions}
-
         # Rate laws 
-        self._generate_rates_sym(sp_syms,tr_syms) 
+        self._generate_rates_sym() 
         self.log_rates()
-        #self._lambdify_sym_rates(sp_syms) # Overwrites self._rates_func with a lambdified version of self.system.simin["rates_sym"]
+        #self.lambdify_sym_rates() # Overwrites self._rates_func with a lambdified version of self.system.simin["rates_sym"]
 
         # Jacobian
-        self._generate_jac(sp_syms) # generates self.system.simin["J_sym"], self.system.simin["J_symsp_numtr"], self.system.simin["J_func_wrap"]
+        self._generate_jac() # generates self.system.simin["J_sym"], self.system.simin["J_symsp_numtr"], self.system.simin["J_func_wrap"]
         self.log_jac()
 
     def _generate_matrices_for_rates_func(self):
@@ -117,7 +114,7 @@ class ODESolver(BaseSimulator):
         rates = np.dot(C_Nr,N_K)
         return rates
     
-    def _generate_rates_sym(self,sp_syms,tr_syms):
+    def _generate_rates_sym(self):
         """
         Notes
         -----
@@ -128,9 +125,9 @@ class ODESolver(BaseSimulator):
         Adds these key/value pairs to both system and species simin dictionaries.
         """
         # Generate rate's with symbolic species and rate constants 
-        rates_sym = Matrix([0] * len(sp_syms))
+        rates_sym = Matrix([0] * len(self.system.species))
         for tr_name, tr in self.system.transitions.items():
-            unscaled_rate = tr_syms[tr_name] * prod(sp_syms[sp_name]**coeff for sp_name, coeff in tr.source)
+            unscaled_rate = self.system.transitions[tr_name].sym * prod(self.system.species[sp_name].sym**coeff for sp_name, coeff in tr.source)
             for sp_name, coeff in tr.source:
                 rates_sym[self.system.species[sp_name].index] -= coeff * unscaled_rate
             for sp_name, coeff in tr.target:
@@ -150,16 +147,15 @@ class ODESolver(BaseSimulator):
 
         return 
     
-    def _lambdify_sym_rates(self,sp_syms):
+    def lambdify_sym_rates(self):
         """
         Convert the symbolic rate vector (with numerical rate constants) into a numerical function.
 
         Notes
         -----
-        This overwrites the native self._rate function. It's just as fast typically, if not a little faster.
-        Not currently utilized, but this might be useful someday.
+        This overwrites the unsymbolic self._rates_func function.
         """
-        species_vec = Matrix([sp_syms[name] for name in self.system.species])
+        species_vec = Matrix([self.system.species[sp_name].sym for sp_name in self.system.species])
         rates_func = lambdify(species_vec, self.system.simin["rates_numk"], 'numpy')
         self._rates_func = lambda t, y: rates_func(*y).flatten()
         return
@@ -215,7 +211,7 @@ class ODESolver(BaseSimulator):
             print(rate_log)
         return
 
-    def _generate_jac(self,sp_syms):
+    def _generate_jac(self):
         """
         Notes
         -----
@@ -230,7 +226,7 @@ class ODESolver(BaseSimulator):
             change equations for each species with respect to all other species in the system.
         """
         
-        species_vec = Matrix(list(sp_syms.values()))
+        species_vec = Matrix([self.system.species[sp_name].sym for sp_name in self.system.species])
 
         # Symbolic Jacobian
         self.system.simin["J_sym"] = self.system.simin["rates_sym"].jacobian(species_vec)

@@ -56,7 +56,7 @@ class ODESolver(BaseSimulator):
         #self.lambdify_sym_rates() # Overwrites self._rates_func with a lambdified version of self.system.simin["rates_sym"]
 
         # Jacobian
-        self._generate_jac() # generates self.system.simin["J_sym"], self.system.simin["J_symsp_numtr"], self.system.simin["J_func_wrap"]
+        self._generate_jac() 
         self.log_jac()
 
     def _generate_matrices_for_rates_func(self):
@@ -150,14 +150,20 @@ class ODESolver(BaseSimulator):
     def lambdify_sym_rates(self):
         """
         Convert the symbolic rate vector (with numerical rate constants) into a numerical function.
-
+    
         Notes
         -----
-        This overwrites the unsymbolic self._rates_func function.
+        This overwrites the unsymbolic self._rates_func function. It is slightly slower but more flexible.
+
+        Can be used to simulate with custom symbolic rate funcs for each species instead of all following the same ODE paradigm.
         """
+        #TODO: test custom funcs and refactor as needed to make sure its easier and more robust to use (ie make sure the appropriate setup steps are reran
         species_vec = Matrix([self.system.species[sp_name].sym for sp_name in self.system.species])
         rates_func = lambdify(species_vec, self.system.simin["rates_numk"], 'numpy')
         self._rates_func = lambda t, y: rates_func(*y).flatten()
+
+        # Re-generate the Jacobian matrix in case this function is called after the Jacobian has been generated, like for custom functions
+        #self.generate_jac()
         return
 
     def log_rates(self,force_print=False):

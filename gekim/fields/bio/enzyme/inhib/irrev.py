@@ -406,6 +406,7 @@ def KI_kinact_n_fit_to_kobs_wrt_concI0(concI0: np.ndarray, kobs: np.ndarray, non
     
     return fit_output
 
+
 class Parameters:
     """
     Common place for parameters found in covalent inhibition literature.

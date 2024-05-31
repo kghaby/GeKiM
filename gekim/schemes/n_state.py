@@ -203,6 +203,7 @@ class NState:
     #TODO: add/remove_species and add/remove_transition methods
     #TODO: reinits if species or transitions are modified. let user able to define custom rate law funcs 
     #TODO: markovian, nonmarkovian, etc
+    #TODO: add a function for fetching info. say get_simout("species_name")
 
     
     def __init__(self, config: dict, logfilename=None, quiet=False):
@@ -288,6 +289,55 @@ class NState:
                 return False
             labels.add(label)
         return True
+    
+    def simulate(self, simulator = None, *args, **kwargs):
+        """
+        Simulate the system using the provided simulator.
+
+        Parameters
+        ----------
+        simulator : class, optional
+            The simulator class to use for the system. Unless using a custom simulator, 
+            use the provided simulators in gekim.simulators.
+        *args : tuple, optional
+            Additional arguments to pass to the simulator.simulate()
+        **kwargs : dict, optional
+            Additional keyword arguments to pass to the simulator.simulate()
+        
+        Returns
+        -------
+        Returns NState if the simulator didn't return anything, else returns the output of the simulator.
+
+        Notes
+        -----
+        The simulator is forced to ONLY take NState (self) as an argument for initialization. 
+        If the simulator requires additional arguments, initialize the simulator in an extra step, like so:
+        ```python
+        system.simulator = simulator(system, *args, **kwargs)
+        system.simulator.simulate(*args, **kwargs)
+        ```
+
+        or
+                
+        ```python
+        system.set_simulator(simulator, *args, **kwargs)
+        system.simulator.simulate(*args, **kwargs)
+        ```
+        """
+        if not simulator:
+            if not self.simulator:
+                self.log.error("Simulator not set. Use as an argument in NState.simulate() or set an initialized simulator to NState.simulator")
+                return 
+            else:
+                simout = self.simulator.simulate(*args, **kwargs)
+                if simout:
+                    return simout
+        else:
+            simulator = simulator(self)
+            simout = simulator.simulate(*args, **kwargs)
+            if simout:
+                return simout
+        return self
 
     def set_simulator(self, simulator, *args, **kwargs) -> None:
         """
@@ -299,9 +349,9 @@ class NState:
             The simulator class to use for the system. Unless using a custom simulator, 
             use the provided simulators in gekim.simulators.
         *args : tuple, optional
-            Additional arguments to pass to the simulator.
+            Additional arguments to pass to the simulator for initialization.
         **kwargs : dict, optional
-            Additional keyword arguments to pass to the simulator.
+            Additional keyword arguments to pass to the simulator for initialization.
 
         Notes
         -----
@@ -313,7 +363,6 @@ class NState:
         because IDE syntax and doc helpers may not pick up the new simulator attribute and simulate method.
         """
         self.simulator = simulator(self, *args, **kwargs)
-        self.simulate = self.simulator.simulate
         self.log.info(f"Simulator set to {simulator.__name__}.\n")
         self.log.info(f"Use system.simulator.simulate() or system.simulate() to run the simulation.\n")
 

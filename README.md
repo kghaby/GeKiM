@@ -37,7 +37,7 @@ scheme = {
 }
 
 # Initialize a system with your schematic dictionary
-system = gk.schemes.NState(scheme)
+system = gk.schemes.NState(scheme,quiet=False)
 
 # Choose a simulator and go. In this example we're doing a deterministic 
 # simulation of the concentrations of each species over time.

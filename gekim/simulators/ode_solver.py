@@ -158,6 +158,7 @@ class ODESolver(BaseSimulator):
         Can be used to simulate with custom symbolic rate funcs for each species instead of all following the same ODE paradigm.
         """
         #TODO: test custom funcs and refactor as needed to make sure its easier and more robust to use (ie make sure the appropriate setup steps are reran
+        # currently uses the system.simin, not species specific. would need to remake system.simin, or alter rate func at the generate_rates_sym step
         species_vec = Matrix([self.system.species[sp_name].sym for sp_name in self.system.species])
         rates_func = lambdify(species_vec, self.system.simin["rates_numk"], 'numpy')
         self._rates_func = lambda t, y: rates_func(*y).flatten()

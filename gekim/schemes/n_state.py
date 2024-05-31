@@ -290,7 +290,7 @@ class NState:
             labels.add(label)
         return True
     
-    def simulate(self, simulator = None, *args, **kwargs):
+    def simulate(self, simulator=None, *args, **kwargs):
         """
         Simulate the system using the provided simulator.
 
@@ -333,6 +333,7 @@ class NState:
                 if simout:
                     return simout
         else:
+            self.log.info(f"Simulating with {simulator.__name__}.\n")
             simulator = simulator(self)
             simout = simulator.simulate(*args, **kwargs)
             if simout:

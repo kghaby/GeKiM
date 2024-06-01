@@ -6,7 +6,7 @@ from collections import defaultdict
 from typing import Union
 from ..utils.helpers import integerable_float
 from ..utils.logging import Logger
-    
+#todo: dataclasses for species transitions and paths 
 class Species:
     def __init__(self, name: str, y0: Union[np.ndarray,float], label=None, color=None):
             """

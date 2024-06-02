@@ -78,8 +78,11 @@ class Transition:
         -------
         bool
             True if the transition is linear, False otherwise.
+
+        Notes
+        -----
+        A first-order reaction must have exactly one source species (with a stoichiometric coefficient of 1).
         """
-        # A first-order reaction must have exactly one reactant with a stoichiometric coefficient of 1
         return len(self.source) == 1 and self.source[0][1] == 1
 
     @staticmethod

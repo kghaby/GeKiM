@@ -4,6 +4,8 @@ from scipy.stats import gaussian_kde
 from ...utils.helpers import update_dict_with_subset
 from ...utils.fitting import detect_bad_fit, FitOutput, _normalize_params, _unnormalize_popt, _extract_fit_info, _prepare_output
 
+#TODO: normalize for fit for x axis as well
+
 def res_time():
     raise NotImplementedError()
 
@@ -17,7 +19,7 @@ def dose_response(dose: np.ndarray,Khalf: float,n=1,uplim=1):
         Array of input concentrations of the ligand.
     Khalf : float
         The dose required for half output response.
-    n : int, optional
+    n : float, optional
         Hill coefficient, default is 1.
     uplim : float, optional
         The upper limit of the response, default is 1, ie 100%.
@@ -47,7 +49,7 @@ def dose_response_fit(dose: np.ndarray, response: np.ndarray, nondefault_params:
         ```python
         default_params = {
             "Khalf": {"fix": None, "guess": 100, "bounds": (0,np.inf)},
-            "n": {"fix": None, "guess": 1, "bounds": (-np.inf,np.inf)}, 
+            "n": {"fix": None, "guess": 1, "bounds": (0,np.inf)}, 
             "uplim": {"fix": 1, "guess": 1, "bounds": (0,np.inf)},
         }
         ```
@@ -76,7 +78,7 @@ def dose_response_fit(dose: np.ndarray, response: np.ndarray, nondefault_params:
     # Default
     params = {
         "Khalf": {"fix": None, "guess": 100, "bounds": (0,np.inf)},
-        "n": {"fix": None, "guess": 1, "bounds": (-np.inf,np.inf)}, 
+        "n": {"fix": None, "guess": 1, "bounds": (0,np.inf)}, 
         "uplim": {"fix": 1, "guess": 1, "bounds": (0,np.inf)},
     }
 

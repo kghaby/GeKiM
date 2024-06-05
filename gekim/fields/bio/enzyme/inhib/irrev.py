@@ -304,6 +304,10 @@ def kobs_wrt_concI0(concI0,KI,kinact,n=1):
     np.ndarray
         Array of kobs values, the first order observed rate constants of inactivation, 
         with units of inverse time.
+    
+    Notes
+    -----
+    Assumes that concI is constant over the timecourses where kobs is calculated. 
     '''
     return kinact/(1+(KI/concI0)**n)
 
@@ -351,6 +355,8 @@ def KI_kinact_n_fit_to_kobs_wrt_concI0(concI0: np.ndarray, kobs: np.ndarray, non
     Notes
     -----
     "fix" takes priority over "guess" in the param dict.
+    
+    Assumes that concI is constant over the timecourses where kobs is calculated. 
     """
     # Default
     params = {

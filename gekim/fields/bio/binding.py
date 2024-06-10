@@ -9,7 +9,7 @@ from ...utils.fitting import detect_bad_fit, FitOutput, _normalize_params, _unno
 def res_time():
     raise NotImplementedError()
 
-def dose_response(dose: np.ndarray,Khalf: float,n=1,uplim=1): 
+def dose_response(dose: np.ndarray,Khalf: float,n=1,uplim=1,nonspecific_m=0): 
     '''
     Calculates the Hill equation for a dose-response curve.
 
@@ -23,16 +23,18 @@ def dose_response(dose: np.ndarray,Khalf: float,n=1,uplim=1):
         Hill coefficient, default is 1.
     uplim : float, optional
         The upper limit of the response, default is 1, ie 100%.
+    nonspecific_m : float, optional
+        The slope of the nonspecific term, default is 0.
 
     Returns
     -------
     np.ndarray
         The fraction of the responding population.
     '''
-    return uplim/(1+(Khalf/dose)**n)
+    return uplim/(1+(Khalf/dose)**n) + nonspecific_m*dose
 
 def dose_response_fit(dose: np.ndarray, response: np.ndarray, nondefault_params: dict = None, xlim: tuple = None,
-                                       normalize_for_fit=True, sigma_kde=False, sigma=None, **kwargs) -> FitOutput: 
+                                       normalize_for_fit=False, sigma_kde=False, sigma=None, **kwargs) -> FitOutput: 
     """
     Fit parameters (Khalf, Khalfnact, n) to response with respect to dose using 
     a structured dictionary for parameters.
@@ -51,6 +53,7 @@ def dose_response_fit(dose: np.ndarray, response: np.ndarray, nondefault_params:
             "Khalf": {"fix": None, "guess": 100, "bounds": (0,np.inf)},
             "n": {"fix": None, "guess": 1, "bounds": (0,np.inf)}, 
             "uplim": {"fix": 1, "guess": 1, "bounds": (0,np.inf)},
+            "nonspecific_m": {"fix": 0, "guess": 0, "bounds": (0,np.inf)} # nonspecific slope
         }
         ```
     xlim : tuple, optional
@@ -80,6 +83,7 @@ def dose_response_fit(dose: np.ndarray, response: np.ndarray, nondefault_params:
         "Khalf": {"fix": None, "guess": 100, "bounds": (0,np.inf)},
         "n": {"fix": None, "guess": 1, "bounds": (0,np.inf)}, 
         "uplim": {"fix": 1, "guess": 1, "bounds": (0,np.inf)},
+        "nonspecific_m": {"fix": 0, "guess": 0, "bounds": (0,np.inf)} # nonspecific slope
     }
 
     if nondefault_params is not None:
@@ -106,7 +110,7 @@ def dose_response_fit(dose: np.ndarray, response: np.ndarray, nondefault_params:
 
     def fitting_adapter(dose, *fitting_params):
         all_params = {**fixed_params, **dict(zip(param_order, fitting_params))}
-        return dose_response(dose, all_params["Khalf"], all_params["n"], all_params["uplim"])
+        return dose_response(dose, all_params["Khalf"], all_params["n"], all_params["uplim"], all_params["nonspecific_m"])
 
     popt, pcov = curve_fit(fitting_adapter, dose, response, p0=p0, bounds=bounds, sigma=sigma, **kwargs)
         

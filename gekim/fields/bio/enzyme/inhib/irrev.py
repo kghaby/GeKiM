@@ -1,15 +1,13 @@
 import numpy as np
-from scipy.optimize import curve_fit
-from scipy.stats import gaussian_kde
+from lmfit import Parameters
+from lmfit.model import ModelResult
+from typing import Union
 from .....utils.helpers import update_dict_with_subset
-from .....utils.fitting import detect_bad_fit, FitOutput, _normalize_params, _unnormalize_popt, _extract_fit_info, _prepare_output
+from .....utils.fitting import general_fit, merge_params
 
 #TODO: fit to scheme. meaning yuo make a scheme without values for the transitions and fit it to occ data to see what values of rates satisfy curve
-#TODO: detect trivial solutions for curve fitting, like if all values are the same, or if all values are 0, or if all values are 1.
-#TODO: time arrays that are not evenly spaced will hurt curve fitting.
-#TODO: refactor fitting. kobs fitting shares lots
 
-def occ_final_wrt_t(t,kobs,Etot,uplim=1):
+def occ_final_wrt_t(t,kobs,Etot,uplim=1) -> np.ndarray:
     '''
     Calculate the occupancy of final occupancy (Occ_cov) with respect to time.
 
@@ -29,10 +27,10 @@ def occ_final_wrt_t(t,kobs,Etot,uplim=1):
     np.ndarray
         Occupancy of final occupancy (Occ_cov).
     '''
-    return uplim*Etot*(1-np.e**(-kobs*t))
+    return uplim * Etot * (1 - np.e**(-kobs * t))
 
-def kobs_uplim_fit_to_occ_final_wrt_t(t: np.ndarray, occ_final: np.ndarray, nondefault_params: dict = None, xlim: tuple = None, 
-                                      normalize_for_fit=True, sigma_kde=False, sigma=None, **kwargs) -> FitOutput: 
+def kobs_uplim_fit_to_occ_final_wrt_t(t, occ_final, nondefault_params: Union[dict,Parameters] = None, xlim: tuple = None, 
+                                        weights_kde=False, weights: np.ndarray = None, verbosity=2, **kwargs) -> ModelResult:
     '''
     Fit kobs to the first order occupancy over time.
 
@@ -42,106 +40,52 @@ def kobs_uplim_fit_to_occ_final_wrt_t(t: np.ndarray, occ_final: np.ndarray, nond
         Array of timepoints.
     occ_final : np.ndarray
         Array of observed occupancy, i.e. concentration.
-    nondefault_params : dict, optional
-        A structured dictionary of parameters with 'fixed','guess', and 'bound' keys. 
-        Include any params to override the default.
+    nondefault_params : dict or Parameters, optional
+        A structured dictionary of parameters with 'value','vary', and 'bound' keys or a lmfit.Parameters object.
+        Defaults:
         ```python
-        default_params = {
-            # Observed rate constant
-            "kobs": {"fix": None, "guess": 0.01, "bounds": (0,np.inf)}, 
-            # Total concentration of E over all species
-            "Etot": {"fix": None, "guess": 1, "bounds": (0,np.inf)},    
-            # Scales the upper limit of the curve
-            "uplim": {"fix": None, "guess": 1, "bounds": (0,np.inf)},   
+        # Observed rate constant
+        default_params.add('kobs', value=0.01, vary=True, min=0, max=np.inf)
+        # Total concentration of E over all species
+        default_params.add('Etot', value=1, vary=True, min=0, max=np.inf)
+        # Scales the upper limit of the curve
+        default_params.add('uplim', value=1, vary=True, min=0, max=np.inf)
+        ```
+        Example dict of nondefaults:
+        ```python
+        nondefault_params = {
+            "Etot": {"vary": False, "value": 0.5},  
+            "uplim": {"vary": False},    
         }
         ```
     xlim : tuple, optional
         Limits for the time points considered in the fit (min_t, max_t).
-    normalize_for_fit : bool, optional
-        If True, normalize the observed data and relevant params by dividing by the maximum value before fitting. 
-        Will still return unnormalized values. Default is True.
-    sigma_kde : bool, optional
-        If True, calculate the density of the x-values and use that for sigma (uncertainty) in the curve_fitting. 
+    weights_kde : bool, optional
+        If True, calculate the density of the x-values and use the normalized reciprocol as weights. Similar to 1/sigma for scipy.curve_fit.
         Helps distribute weight over unevenly-spaced points. Default is False.
-    sigma : np.ndarray, optional
-        sigma parameter for curve_fit. This argument is overridden if sigma_kde=True. Default is None.
+    weights : np.ndarray, optional
+        weights parameter for fitting. This argument is overridden if weights_kde=True. Default is None.
+    verbosity : int, optional
+        0: print nothing. 1: print upon bad fit. 2: print always. Default is 2.
     kwargs : dict, optional
-        Additional keyword arguments to pass to the curve_fit function.
+        Additional keyword arguments to pass to the lmfit Model.fit function.
 
     Returns
     -------
-    FitOutput
-        An instance of the FitOutput class
+    lmfit.ModelResult
+        The result of the fitting operation from lmfit.
 
-    Example
-    -------
-    ```python
-    fit_output =  ci.kobs_uplim_fit_to_occ_final_wrt_t(t,
-                    system.system.species["EI"].simout["y"],
-                    nondefault_params={"Etot":{"fix":concE0}})
-    ```
-    will fit kobs and uplim to the concentration of EI over time, fixing Etot at concE0.
-
-    Notes
-    -----
-    "fix" takes priority over "guess" in the param dict.
     '''
 
-    # Default
-    params = {
-        "kobs": {"fix": None, "guess": 0.01, "bounds": (0,np.inf)},
-        "Etot": {"fix": None, "guess": 1, "bounds": (0,np.inf)},
-        "uplim": {"fix": None, "guess": 1, "bounds": (0,np.inf)}, 
-    }
+    default_params = Parameters()
+    default_params.add('kobs', value=0.01, vary=True, min=0, max=np.inf)
+    default_params.add('Etot', value=1, vary=True, min=0, max=np.inf)
+    default_params.add('uplim', value=1, vary=True, min=0, max=np.inf)
 
-    if nondefault_params is not None:
-        params = update_dict_with_subset(params, nondefault_params)
+    lm_params = merge_params(default_params, nondefault_params)
 
+    return general_fit(occ_final_wrt_t, t, occ_final, lm_params, xlim=xlim, weights_kde=weights_kde, weights=weights, verbosity=verbosity, **kwargs)
 
-    if normalize_for_fit:
-        norm_factor = occ_final.max()
-        occ_final_unnorm = occ_final
-        occ_final = occ_final/norm_factor
-        params = _normalize_params(params,norm_factor,["Etot"])
-
-    p0, bounds, param_order, fixed_params = _extract_fit_info(params)
-
-    if xlim:
-        indices = (t >= xlim[0]) & (t <= xlim[1])
-        t = t[indices]
-        occ_final = occ_final[indices]
-    
-    if sigma_kde:
-        kde = gaussian_kde(t)
-        sigma = kde(t) 
-    else:
-        sigma = sigma
-
-    def fitting_adapter(t, *fitting_params):
-        all_params = {**fixed_params, **dict(zip(param_order, fitting_params))}
-        return occ_final_wrt_t(t,all_params["kobs"],all_params["Etot"],uplim=all_params["uplim"])
-    
-    #jac_func = fitting.generate_jacobian_func(fitting_adapter, param_order) #makes curve_fit almost 2x slower 
-    popt, pcov = curve_fit(fitting_adapter, t, occ_final, p0=p0, bounds=bounds, sigma=sigma, **kwargs)
-
-    # Unnorm occ_final and params
-    if normalize_for_fit:
-        occ_final = occ_final_unnorm
-        for param in ["Etot"]:
-            if param in param_order:
-                popt = _unnormalize_popt(popt,param_order,norm_factor,[param])
-            elif param in fixed_params:
-                fixed_params[param] = fixed_params[param]*norm_factor
-    
-    fitted_data = fitting_adapter(t, *popt)
-    fit_output = _prepare_output(t, fitted_data, occ_final, popt, pcov, param_order)
-
-    bad_fit, message = detect_bad_fit(fitted_data, occ_final, popt, pcov, bounds, param_order)
-    if bad_fit:
-        print(f"Bad fit detected:{message}")
-        print(f"\tFitted params: {fit_output.fitted_params}\n")
-
-    return fit_output
 
 
 
@@ -172,11 +116,11 @@ def occ_total_wrt_t(t,kobs,concI0,KI,Etot,uplim=1):
         Occupancy of total occupancy (Occ_tot).
     '''
 
-    FO = 1/(1+(KI/concI0)) # Equilibrium occupancy of reversible portion
-    return uplim*Etot*(1-(1-FO)*(np.e**(-kobs*t)))
+    FO = 1 / (1 + (KI / concI0)) # Equilibrium occupancy of reversible portion
+    return uplim * Etot * (1 - (1 - FO) * np.exp(-kobs * t))
 
-def kobs_KI_uplim_fit_to_occ_total_wrt_t(t: np.ndarray, occ_tot: np.ndarray, nondefault_params: dict = None, xlim: tuple = None, 
-                                         normalize_for_fit=True, sigma_kde=False, sigma=None, **kwargs) -> FitOutput: 
+def kobs_KI_uplim_fit_to_occ_total_wrt_t(t: np.ndarray, occ_tot: np.ndarray, nondefault_params: Union[dict,Parameters] = None, xlim: tuple = None, 
+                                        weights_kde=False, weights: np.ndarray = None, verbosity=2, **kwargs) -> ModelResult:
     '''
     Fit kobs and KI to the total occupancy of all bound states over time, 
     assuming fast reversible binding equilibrated at t=0.
@@ -186,102 +130,56 @@ def kobs_KI_uplim_fit_to_occ_total_wrt_t(t: np.ndarray, occ_tot: np.ndarray, non
     t : np.ndarray
         Array of timepoints.
     occ_tot : np.ndarray
-        Array of total occupancy.
-    nondefault_params : dict, optional
-        A structured dictionary of parameters with 'fixed','guess', and 'bound' keys. 
-        Include any params to override the default.
+        Array of total bound enzyme population. All occupied states.
+    nondefault_params : dict or Parameters, optional
+        A structured dictionary of parameters with 'value','vary', and 'bound' keys or a lmfit.Parameters object.
+        Defaults:
+       ```python
+        # Observed rate constant
+        default_params.add('kobs', value=0.01, vary=True, min=0, max=np.inf)
+        # Initial concentration of the (saturating) inhibitor
+        default_params.add('concI0', value=100, vary=True, min=0, max=np.inf)
+        # Inhibition constant where kobs = kinact/2.
+        default_params.add('KI', value=10, vary=True, min=0, max=np.inf)
+        # Total concentration of E across all species
+        default_params.add('Etot', value=1, vary=True, min=0, max=np.inf)
+        # Scales the upper limit of the curve
+        default_params.add('uplim', value=1, vary=True, min=0, max=1)      
+        ```
+        Example dict of nondefaults:
         ```python
-        default_params = {
-            # Observed rate constant
-            "kobs": {"fix": None, "guess": 0.01, "bounds": (0,np.inf)},
-            # Initial concentration of the (saturating) inhibitor
-            "concI0": {"fix": None, "guess": 100, "bounds": (0,np.inf)},
-            # Inhibition constant where kobs = kinact/2.
-            "KI": {"fix": None, "guess": 10, "bounds": (0,np.inf)},
-            # Total concentration of E across all species
-            "Etot": {"fix": None, "guess": 1, "bounds": (0,np.inf)},
-            # Scales the upper limit of the curve
-            "uplim": {"fix": None, "guess": 1, "bounds": (0,1)},        
+        nondefault_params = {
+            "Etot": {"vary": False, "value": 0.5},  
+            "uplim": {"vary": False},    
         }
         ```
     xlim : tuple, optional
         Limits for the time points considered in the fit (min_t, max_t).
-    normalize_for_fit : bool, optional
-        If True, normalize the observed data and relevant params by dividing by the maximum value before fitting. 
-        Will still return unnormalized values. Default is True.
-    sigma_kde : bool, optional
-        If True, calculate the density of the x-values and use that for sigma (uncertainty) in the curve_fitting. 
+    weights_kde : bool, optional
+        If True, calculate the density of the x-values and use the normalized reciprocol as weights. Similar to 1/sigma for scipy.curve_fit.
         Helps distribute weight over unevenly-spaced points. Default is False.
-    sigma : np.ndarray, optional
-        sigma parameter for curve_fit. This argument is overridden if sigma_kde=True. Default is None.
+    weights : np.ndarray, optional
+        weights parameter for fitting. This argument is overridden if weights_kde=True. Default is None.
+    verbosity : int, optional
+        0: print nothing. 1: print upon bad fit. 2: print always. Default is 2.
     kwargs : dict, optional
-        Additional keyword arguments to pass to the curve_fit function.
+        Additional keyword arguments to pass to the lmfit Model.fit function.
 
     Returns
     -------
-    FitOutput
-        An instance of the FitOutput class
-    
-    Notes
-    -----
-    "fix" takes priority over "guess" in the param dict.
+    lmfit.ModelResult
+        The result of the fitting operation from lmfit.
+
     '''
-    # Default
-    params = {
-        "kobs": {"fix": None, "guess": 0.01, "bounds": (0,np.inf)},
-        "concI0": {"fix": None, "guess": 100, "bounds": (0,np.inf)},
-        "KI": {"fix": None, "guess": 10, "bounds": (0,np.inf)},
-        "Etot": {"fix": None, "guess": 1, "bounds": (0,np.inf)},
-        "uplim": {"fix": None, "guess": 1, "bounds": (0,1)}, 
-    }
+    default_params = Parameters()
+    default_params.add('kobs', value=0.01, vary=True, min=0, max=np.inf)
+    default_params.add('concI0', value=100, vary=True, min=0, max=np.inf)
+    default_params.add('KI', value=10, vary=True, min=0, max=np.inf)
+    default_params.add('Etot', value=1, vary=True, min=0, max=np.inf)
+    default_params.add('uplim', value=1, vary=True, min=0, max=1)
 
-    if nondefault_params is not None:
-        params = update_dict_with_subset(params, nondefault_params)
-
-    if normalize_for_fit:
-        norm_factor = occ_tot.max()
-        occ_tot_unnorm = occ_tot
-        occ_tot = occ_tot/norm_factor
-        params = _normalize_params(params,norm_factor,["Etot"])
-    
-    p0, bounds, param_order, fixed_params = _extract_fit_info(params)
-
-    if xlim:
-        indices = (t >= xlim[0]) & (t <= xlim[1])
-        t = t[indices]
-        occ_tot = occ_tot[indices]
-
-    if sigma_kde:
-        kde = gaussian_kde(t)
-        sigma = kde(t) 
-    else:
-        sigma = sigma
-
-        
-    def fitting_adapter(t, *fitting_params):
-        all_params = {**fixed_params, **dict(zip(param_order, fitting_params))}
-        return occ_total_wrt_t(t,all_params["kobs"],all_params["concI0"],all_params["KI"],all_params["Etot"],uplim=all_params["uplim"])
-
-    popt, pcov = curve_fit(fitting_adapter, t, occ_tot, p0=p0, bounds=bounds, sigma=sigma, **kwargs)
-
-    # Unnorm occ and params
-    if normalize_for_fit:
-        occ_tot = occ_tot_unnorm
-        for param in ["Etot"]:
-            if param in param_order:
-                popt = _unnormalize_popt(popt,param_order,norm_factor,[param])
-            elif param in fixed_params:
-                fixed_params[param] = fixed_params[param]*norm_factor
-    
-    fitted_data = fitting_adapter(t, *popt)
-    fit_output = _prepare_output(t, fitted_data, occ_tot, popt, pcov, param_order,)
-    
-    bad_fit, message = detect_bad_fit(fitted_data, occ_tot, popt, pcov, bounds, param_order)
-    if bad_fit:
-        print(f"Bad fit detected:{message}")
-        print(f"\tFitted params: {fit_output.fitted_params}\n")
-    
-    return fit_output   
+    lm_params = merge_params(default_params, nondefault_params)
+    return general_fit(occ_total_wrt_t, t, occ_tot, lm_params, xlim=xlim, weights_kde=weights_kde, weights=weights, verbosity=verbosity, **kwargs)
 
 def kobs_wrt_concI0(concI0,KI,kinact,n=1): 
     '''
@@ -309,10 +207,10 @@ def kobs_wrt_concI0(concI0,KI,kinact,n=1):
     -----
     Assumes that concI is constant over the timecourses where kobs is calculated. 
     '''
-    return kinact/(1+(KI/concI0)**n)
+    return kinact / (1 + (KI / concI0)**n)
 
-def KI_kinact_n_fit_to_kobs_wrt_concI0(concI0: np.ndarray, kobs: np.ndarray, nondefault_params: dict = None, xlim: tuple = None,
-                                       normalize_for_fit=True, sigma_kde=False, sigma=None, **kwargs) -> FitOutput: 
+def KI_kinact_n_fit_to_kobs_wrt_concI0(concI0: np.ndarray, kobs: np.ndarray, nondefault_params: Union[dict,Parameters] = None, xlim: tuple = None, 
+                                        weights_kde=False, weights: np.ndarray = None, verbosity=2, **kwargs) -> ModelResult:
     """
     Fit parameters (KI, kinact, n) to kobs with respect to concI0 using 
     a structured dictionary for parameters.
@@ -323,94 +221,46 @@ def KI_kinact_n_fit_to_kobs_wrt_concI0(concI0: np.ndarray, kobs: np.ndarray, non
         Array of initial concentrations of the inhibitor.
     kobs : np.ndarray
         Array of observed rate constants.
-    nondefault_params : dict, optional
-        A structured dictionary of parameters with 'fixed','guess', and 'bound' keys. 
-        Include any params to override the default.
+    nondefault_params : dict or Parameters, optional
+        A structured dictionary of parameters with 'value','vary', and 'bound' keys or a lmfit.Parameters object.
+        Defaults:
+       ```python
+        default_params.add('KI', value=100, vary=True, min=0, max=np.inf)
+        default_params.add('kinact', value=0.01, vary=True, min=0, max=np.inf)
+        default_params.add('n', value=1, vary=False, min=0, max=np.inf)   
+        ```
+        Example dict of nondefaults:
         ```python
-        default_params = {
-            "KI": {"fix": None, "guess": 100, "bounds": (0,np.inf)},
-            "kinact": {"fix": None, "guess": 0.01, "bounds": (0,np.inf)},
-            # fix overrides guess, so set fix to None if you wish to include "n"
-            "n": {"fix": 1, "guess": 1, "bounds": (0,np.inf)}, 
+        nondefault_params = {
+            "n": {"vary": True},    
         }
         ```
     xlim : tuple, optional
-        Limits for the concI0 points considered in the fit (min_concI0, max_concI0).
-    normalize_for_fit : bool, optional
-        If True, normalize the observed data and relevant params by dividing by the maximum value before fitting. 
-        Will still return unnormalized values. Default is True.
-    sigma_kde : bool, optional
-        If True, calculate the density of the x-values and use that for sigma (uncertainty) in the curve_fitting. 
+        Limits for the time points considered in the fit (min_t, max_t).
+    weights_kde : bool, optional
+        If True, calculate the density of the x-values and use the normalized reciprocol as weights. Similar to 1/sigma for scipy.curve_fit.
         Helps distribute weight over unevenly-spaced points. Default is False.
-    sigma : np.ndarray, optional
-        sigma parameter for curve_fit. This argument is overridden if sigma_kde=True. Default is None.
+    weights : np.ndarray, optional
+        weights parameter for fitting. This argument is overridden if weights_kde=True. Default is None.
+    verbosity : int, optional
+        0: print nothing. 1: print upon bad fit. 2: print always. Default is 2.
     kwargs : dict, optional
-        Additional keyword arguments to pass to the curve_fit function.    
-    
+        Additional keyword arguments to pass to the lmfit Model.fit function.
+
     Returns
     -------
-    FitOutput
-        An instance of the FitOutput class
-    
-    Notes
-    -----
-    "fix" takes priority over "guess" in the param dict.
+    lmfit.ModelResult
+        The result of the fitting operation from lmfit.
     
     Assumes that concI is constant over the timecourses where kobs is calculated. 
     """
-    # Default
-    params = {
-        "KI": {"fix": None, "guess": 100, "bounds": (0,np.inf)},
-        "kinact": {"fix": None, "guess": 0.01, "bounds": (0,np.inf)},
-        "n": {"fix": 1, "guess": 1, "bounds": (0,np.inf)}, 
-    }
+    default_params = Parameters()
+    default_params.add('KI', value=100, vary=True, min=0, max=np.inf)
+    default_params.add('kinact', value=0.01, vary=True, min=0, max=np.inf)
+    default_params.add('n', value=1, vary=True, min=0, max=np.inf)
 
-    if nondefault_params is not None:
-        params = update_dict_with_subset(params, nondefault_params)
-
-    if normalize_for_fit:
-        norm_factor = kobs.max()
-        kobs_unnorm = kobs
-        kobs = kobs/norm_factor
-        params = _normalize_params(params,norm_factor,["kinact"])
-
-    p0, bounds, param_order, fixed_params = _extract_fit_info(params)
-
-    if xlim:
-        indices = (concI0 >= xlim[0]) & (concI0 <= xlim[1])
-        concI0 = concI0[indices]
-        kobs = kobs[indices]
-
-    if sigma_kde:
-        kde = gaussian_kde(concI0)
-        sigma = kde(concI0) 
-    else:
-        sigma = sigma
-
-    def fitting_adapter(concI0, *fitting_params):
-        all_params = {**fixed_params, **dict(zip(param_order, fitting_params))}
-        return kobs_wrt_concI0(concI0, all_params["KI"], all_params["kinact"], all_params["n"])
-
-    popt, pcov = curve_fit(fitting_adapter, concI0, kobs, p0=p0, bounds=bounds, sigma=sigma, **kwargs)
-        
-    # Unnorm kobs and params
-    if normalize_for_fit:
-        kobs = kobs_unnorm
-        for param in ["kinact"]:
-            if param in param_order:
-                popt = _unnormalize_popt(popt,param_order,norm_factor,[param])
-            elif param in fixed_params:
-                fixed_params[param] = fixed_params[param]*norm_factor
-            
-    fitted_data = fitting_adapter(concI0, *popt)
-    fit_output = _prepare_output(concI0, fitted_data, kobs, popt, pcov, param_order)
-    
-    bad_fit, message = detect_bad_fit(fitted_data, kobs, popt, pcov, bounds, param_order)
-    if bad_fit:
-        print(f"Bad fit detected:{message}")
-        print(f"\tFitted params: {fit_output.fitted_params}\n")
-    
-    return fit_output
+    lm_params = merge_params(default_params, nondefault_params)
+    return general_fit(kobs_wrt_concI0, concI0, kobs, lm_params, xlim=xlim, weights_kde=weights_kde, weights=weights, verbosity=verbosity, **kwargs)
 
 def dose_response(dose: np.ndarray,Khalf: float, kinact: float, t: float, n=1): 
     '''
@@ -434,12 +284,12 @@ def dose_response(dose: np.ndarray,Khalf: float, kinact: float, t: float, n=1):
     np.ndarray
         The fraction of the responding population.
     '''
-    return (1-np.e**(-kinact*t))/(1+(Khalf/dose)**n)
+    return (1 - np.exp(-kinact * t)) / (1 + (Khalf / dose)**n)
 
-def dose_response_fit(dose: np.ndarray, response: np.ndarray, nondefault_params: dict = None, xlim: tuple = None,
-                                       normalize_for_fit=False, sigma_kde=False, sigma=None, **kwargs) -> FitOutput: 
+def dose_response_fit(dose: np.ndarray, response: np.ndarray, nondefault_params: Union[dict,Parameters] = None, xlim: tuple = None, 
+                                        weights_kde=False, weights: np.ndarray = None, verbosity=2, **kwargs) -> ModelResult:
     """
-    Fit parameters (Khalf, Khalfnact, n) to response with respect to dose using 
+    Fit parameters (Khalf, kinact, n) to response with respect to dose using 
     a structured dictionary for parameters.
 
     Parameters
@@ -448,97 +298,48 @@ def dose_response_fit(dose: np.ndarray, response: np.ndarray, nondefault_params:
         Array of input concentrations of the ligand.
     response : np.ndarray
         Array of the fraction of the responding population.
-    nondefault_params : dict, optional
-        A structured dictionary of parameters with 'fixed','guess', and 'bound' keys. 
-        Include any params to override the default.
+    nondefault_params : dict or Parameters, optional
+        A structured dictionary of parameters with 'value','vary', and 'bound' keys or a lmfit.Parameters object.
+        Defaults:
+       ```python
+        default_params.add('Khalf', value=100, vary=True, min=0, max=np.inf)
+        default_params.add('kinact', value=0.01, vary=True, min=0, max=np.inf)
+        default_params.add('t', value=3600, vary=False)
+        default_params.add('n', value=1, vary=True, min=0, max=np.inf)
+        ```
+        Example dict of nondefaults:
         ```python
-        default_params = {
-            "Khalf": {"fix": None, "guess": 100, "bounds": (0,np.inf)},
-            "kinact": {"fix": None, "guess": 0.01, "bounds": (0,np.inf)},
-            "t": {"fix": 3600, "guess": 3600, "bounds": (0,np.inf)},
-            "n": {"fix": None, "guess": 1, "bounds": (0,np.inf)}, 
+        nondefault_params = {
+            "n": {"vary": False},    
         }
         ```
     xlim : tuple, optional
-        Limits for the dose points considered in the fit (min_dose, max_dose).
-    normalize_for_fit : bool, optional
-        If True, normalize the observed data and relevant params by dividing by the maximum value before fitting. 
-        Will still return unnormalized values. Default is False.
-    sigma_kde : bool, optional
-        If True, calculate the density of the x-values and use that for sigma (uncertainty) in the curve_fitting. 
+        Limits for the time points considered in the fit (min_t, max_t).
+    weights_kde : bool, optional
+        If True, calculate the density of the x-values and use the normalized reciprocol as weights. Similar to 1/sigma for scipy.curve_fit.
         Helps distribute weight over unevenly-spaced points. Default is False.
-    sigma : np.ndarray, optional
-        sigma parameter for curve_fit. This argument is overridden if sigma_kde=True. Default is None.
+    weights : np.ndarray, optional
+        weights parameter for fitting. This argument is overridden if weights_kde=True. Default is None.
+    verbosity : int, optional
+        0: print nothing. 1: print upon bad fit. 2: print always. Default is 2.
     kwargs : dict, optional
-        Additional keyword arguments to pass to the curve_fit function.    
-    
+        Additional keyword arguments to pass to the lmfit Model.fit function.
+
     Returns
     -------
-    FitOutput
-        An instance of the FitOutput class
-    
-    Notes
-    -----
-    "fix" takes priority over "guess" in the param dict.
+    lmfit.ModelResult
+        The result of the fitting operation from lmfit.
     """
-    #TODO: test which params need to be normalized
-    # Default
-    params = {
-        "Khalf": {"fix": None, "guess": 100, "bounds": (0,np.inf)},
-        "kinact": {"fix": None, "guess": 0.01, "bounds": (0,np.inf)},
-        "t": {"fix": 3600, "guess": 3600, "bounds": (0,np.inf)},
-        "n": {"fix": None, "guess": 1, "bounds": (0,np.inf)}, 
-    }
+    default_params = Parameters()
+    default_params.add('Khalf', value=100, vary=True, min=0, max=np.inf)
+    default_params.add('kinact', value=0.01, vary=True, min=0, max=np.inf)
+    default_params.add('t', value=3600, vary=False)
+    default_params.add('n', value=1, vary=True, min=0, max=np.inf)
 
-    if nondefault_params is not None:
-        params = update_dict_with_subset(params, nondefault_params)
+    lm_params = merge_params(default_params, nondefault_params)
+    return general_fit(dose_response, dose, response, lm_params, xlim=xlim, weights_kde=weights_kde, weights=weights, verbosity=verbosity, **kwargs)
 
-    if normalize_for_fit:
-        raise NotImplementedError("This shouldnt be needed, and is not clear which params are affected")
-        norm_factor = response.max()
-        response_unnorm = response
-        response = response/norm_factor
-        params = _normalize_params(params,norm_factor,["Etot"]) # any params that need to be normalized
-
-    p0, bounds, param_order, fixed_params = _extract_fit_info(params)
-
-    if xlim:
-        indices = (dose >= xlim[0]) & (dose <= xlim[1])
-        dose = dose[indices]
-        response = response[indices]
-
-    if sigma_kde:
-        kde = gaussian_kde(dose)
-        sigma = kde(dose) 
-    else:
-        sigma = sigma
-
-    def fitting_adapter(dose, *fitting_params):
-        all_params = {**fixed_params, **dict(zip(param_order, fitting_params))}
-        return dose_response(dose, all_params["Khalf"], all_params["kinact"], all_params["t"],all_params["n"])
-
-    popt, pcov = curve_fit(fitting_adapter, dose, response, p0=p0, bounds=bounds, sigma=sigma, **kwargs)
-        
-    # Unnorm response and params
-    if normalize_for_fit:
-        response = response_unnorm
-        for param in ["Etot"]: # any params that need to be unnormalized 
-            if param in param_order:
-                popt = _unnormalize_popt(popt,param_order,norm_factor,[param])
-            elif param in fixed_params:
-                fixed_params[param] = fixed_params[param]*norm_factor
-            
-    fitted_data = fitting_adapter(dose, *popt)
-    fit_output = _prepare_output(dose, fitted_data, response, popt, pcov, param_order)
-    
-    bad_fit, message = detect_bad_fit(fitted_data, response, popt, pcov, bounds, param_order)
-    if bad_fit:
-        print(f"Bad fit detected:{message}")
-        print(f"\tFitted params: {fit_output.fitted_params}\n")
-    
-    return fit_output
-
-class Parameters:
+class Params:
     """
     Common place for parameters found in covalent inhibition literature.
     """

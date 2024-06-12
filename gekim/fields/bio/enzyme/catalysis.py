@@ -1,4 +1,4 @@
-class Parameters:
+class Params:
     @staticmethod
     def KM(kon, koff, kcat):
         """

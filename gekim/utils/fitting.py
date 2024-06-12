@@ -1,11 +1,160 @@
 import numpy as np
-import inspect
+from inspect import signature
 from sympy import symbols, Matrix, lambdify
-from scipy.optimize import curve_fit
+from typing import Union, Callable
 from scipy.stats import gaussian_kde
-from .helpers import update_dict_with_subset
+from lmfit import Model, Parameters
+from lmfit.model import ModelResult
+
+from .helpers import arr2float
+
 
 #TODO: scheme fitting, rate constant fitting
+                
+def general_fit(model_func: Callable, x: np.ndarray, y: np.ndarray, 
+                params: Union[dict, Parameters], xlim: tuple = None, 
+                weights_kde=False, weights: np.ndarray = None,
+                verbosity=2, **kwargs) -> ModelResult:
+    """
+    General fitting function using lmfit.
+
+    Parameters
+    ----------
+    model_func : callable
+        The model function to fit. Should be of the form model_func(indep_var, *args, **kwargs).
+    x : np.ndarray
+        Array of independent variable.
+    y : np.ndarray
+        Array of observed data.
+    params : dict
+        Dictionary of parameters with 'fixed', 'guess', and 'bounds' keys.
+    xlim : tuple, optional
+        Limits for the x points considered in the fit (min_x, max_x).
+    weights_kde : bool, optional
+        If True, calculate the density of the x-values and use the normalized reciprocol as weights. Similar to 1/sigma for scipy.curve_fit.
+        Helps distribute weight over unevenly-spaced points. Default is False.
+    weights : np.ndarray, optional
+        weights parameter for fitting. This argument is overridden if weights_kde=True. Default is None.
+    verbosity : int, optional
+        0: print nothing. 1: print upon bad fit. 2: print always. Default is 2.
+    kwargs : dict, optional
+        Additional keyword arguments to pass to the lmfit Model.fit function.
+
+    Returns
+    -------
+    ModelResult
+        The result of the fitting operation from lmfit.
+    """
+        
+    if xlim:
+        indices = (x >= xlim[0]) & (x <= xlim[1])
+        x = x[indices]
+        y = y[indices]
+
+    if weights_kde:
+        kde = gaussian_kde(x)
+        weights = 1/kde(x)
+        weights /= np.sum(weights)  # Normalize
+
+    else:
+        weights = weights
+
+    if isinstance(params, Parameters):
+        lm_params = params
+    elif isinstance(params, dict):
+        lm_params = Parameters()
+        for name, info in params.items():
+            if "vary" in info and not info["vary"]:
+                lm_params.add(name, value=info["value"], vary=False)
+            else:
+                lm_params.add(name, value=info["value"], min=info["bounds"][0], max=info["bounds"][1])
+    else:
+        raise ValueError("params must be a lmfit.Parameters or dict instance.")
+
+    # Dynamically handle the independent variable name so that model funcs aren't required to use "x"
+    sig = signature(model_func)
+    indep_var_name = list(sig.parameters.keys())[0]
+
+    model = Model(model_func)
+    model_result = model.fit(y, lm_params, **{indep_var_name: x}, weights=weights, **kwargs)
+
+    if verbosity >= 1:
+        bad_fit, message = detect_bad_fit(model_result)
+        if bad_fit:
+            print(f"Bad fit detected: {message}\n")
+
+        if verbosity >= 2 or bad_fit:
+            model_result.params.pretty_print()
+
+
+    return model_result
+
+def merge_params(default_params: Parameters, nondefault_params: Union[dict, Parameters] = None) -> Parameters:
+    """
+    Merge default and nondefault parameters into a Parameters object.
+
+    Parameters
+    ----------
+    default_params : Parameters
+        The default parameters.
+    nondefault_params : dict or Parameters, optional
+        The nondefault parameters to override the defaults.
+
+    Returns
+    -------
+    Parameters
+        Merged Parameters object.
+    """
+    if nondefault_params is None:
+        return default_params
+
+    merged_params = default_params.copy()
+
+
+    if isinstance(nondefault_params, Parameters):
+        for name, param in nondefault_params.items():
+            if name in merged_params:
+                merged_params[name].set(
+                    value=arr2float(param.value),
+                    vary=param.vary,
+                    min=param.min,
+                    max=param.max,
+                    expr=param.expr,
+                    brute_step=param.brute_step,
+                )
+            else:
+                merged_params.add(name,
+                    value=arr2float(param.value),
+                    vary=param.vary,
+                    min=param.min,
+                    max=param.max,
+                    expr=param.expr,
+                    brute_step=param.brute_step,
+                )
+    elif isinstance(nondefault_params, dict):
+        for name, info in nondefault_params.items():
+            if name in merged_params:
+                merged_params[name].set(
+                    value=arr2float(info.get("value", merged_params[name].value)),
+                    vary=info.get("vary", merged_params[name].vary),
+                    min=info.get("min", merged_params[name].min),
+                    max=info.get("max", merged_params[name].max),
+                    expr=info.get("expr", merged_params[name].expr),
+                    brute_step=info.get("brute_step", merged_params[name].brute_step),
+                )
+            else:
+                merged_params.add(name,
+                    value=arr2float(info.get("value")),
+                    vary=info.get("vary", True),
+                    min=info.get("min", -np.inf),
+                    max=info.get("max", np.inf),
+                    expr=info.get("expr", None),
+                    brute_step=info.get("brute_step", None),
+                )
+    else:
+        raise ValueError("nondefault_params must be a dict or lmfit.Parameters object.")
+
+    return merged_params
 
 def chi_squared(observed_data: np.ndarray, fitted_data: np.ndarray, fitted_params: np.ndarray, variances: np.ndarray = None, reduced=False):
     """
@@ -114,7 +263,7 @@ def generate_jacobian_func(fitting_adapter, param_order):
         A function that calculates the Jacobian matrix given the parameters.
     '''
     # Inspect the model function to get parameter names
-    sig = inspect.signature(fitting_adapter)
+    sig = signature(fitting_adapter)
     x_sym = list(sig.parameters.keys())[0]          # Independent variable
     x_sym = symbols(x_sym)
     param_syms = symbols(param_order)
@@ -168,37 +317,55 @@ def calc_weights_dt(t: np.ndarray):
     weights /= np.sum(weights)  # Normalize 
     return weights
 
-def detect_bad_fit(fitted_data, y_obs, popt, pcov, param_bounds, param_order):
+def detect_bad_fit(result: ModelResult, atol: float = 1e-10) -> tuple[bool, str]:
+    """
+    Detects issues with the fit result from lmfit.
+
+    Parameters
+    ----------
+    result : ModelResult
+        The result of the fitting operation from lmfit.
+
+    Returns
+    -------
+    bad : bool
+    message : str
+    """
     bad = False
     message = ""
 
+    # Extract fitted data and observed data
+    fitted_data = result.best_fit
+    y_obs = result.data
+    residuals = result.residual
+
     # Check for constant output
-    atol = 1e-10
-    if np.allclose(fitted_data, fitted_data[0],atol=atol):
+    if np.allclose(fitted_data, fitted_data[0], atol=atol):
         bad = True
-        message += f"\n\tModel fit y-values were all within {atol:.2e} of eachother."
+        message += f"\n\tModel fit y-values were all within {atol:.2e} of each other."
 
     # Residual analysis
-    residuals = y_obs - fitted_data
     if np.any(np.abs(residuals) > 10 * np.std(y_obs)):
         bad = True
         message += "\n\tResiduals are too large."
 
     # Check if parameters are at bounds
-    for i, param in enumerate(popt):
-        lower_bound, upper_bound = param_bounds[0][i], param_bounds[1][i]
-        if np.isclose(param, lower_bound) or np.isclose(param, upper_bound):
+    for name, param in result.params.items():
+        if np.isclose(param.value, param.min):
             bad = True
-            message += f"\n\tParameter {param_order[i]} is at or near its bound."
+            message += f"\n\tParameter {name} is at or near its lower bound: {param.min}."
+        elif np.isclose(param.value, param.max):
+            bad = True
+            message += f"\n\tParameter {name} is at or near its upper bound: {param.max}."
 
     # Check standard errors
-    param_errors = np.sqrt(np.diag(pcov))
-    if np.any(param_errors > np.abs(popt)):
-        bad = True
-        message += "\n\tLarge standard errors relative to parameter values (note that this could be due to absolute_sigma=True if you used this kwarg for curve_fit):"
-        for i,param in enumerate(param_order):
-            if param_errors[i] > np.abs(popt[i]):
-                message += f"\n\t\t{param}: {popt[i]:.2e} ± {param_errors[i]:.2e}"
+    if result.errorbars:
+        param_errors = {name: param.stderr for name, param in result.params.items() if param.stderr is not None}
+        for name, param in result.params.items():
+            if name in param_errors and param_errors[name] > abs(param.value):
+                bad = True
+                message += f"\n\tLarge standard errors relative to parameter values:"
+                message += f"\n\t\t{name}: {param.value:.2e} ± {param_errors[name]:.2e}"
 
     # Check R^2
     ss_res = np.sum(residuals**2)
@@ -231,3 +398,4 @@ def calc_nrmse(y_exp: np.ndarray, y_pred: np.ndarray):
     range_y = np.ptp(y_exp)  # Equivalent to max(y_exp) - min(y_exp)
     nrmse = 1 - rmse / range_y
     return nrmse
+

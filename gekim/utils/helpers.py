@@ -162,3 +162,15 @@ def generate_dictval_combinations(input_dict: dict):
 
     comb_dict = {name: combinations_array[i] for i, name in enumerate(names)}
     return comb_dict
+
+def arr2float(value: np.ndarray):
+    """
+    Convert an size-1 array to float.
+    """
+    if isinstance(value,np.ndarray):
+        if value.size == 1:
+            return float(value[0])
+        else:
+            raise ValueError("Array is not size 1.")
+    else:
+        return value

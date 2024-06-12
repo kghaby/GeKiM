@@ -50,9 +50,8 @@ final_state = system.species["EI"].simout["y"]
 all_bound = system.sum_species_simout(blacklist=["E","I"])
 
 fit_output = ii.kobs_uplim_fit_to_occ_final_wrt_t(
-    t,final_state,nondefault_params={"Etot":{"fix":concE0}})
+    t,final_state,nondefault_params={"Etot":{"value":concE0,"vary":False}})
 
-print(f"Fit: {fit_output.fitted_params}\n")
 ```
 For more detailed examples, please refer to the examples directory.
 

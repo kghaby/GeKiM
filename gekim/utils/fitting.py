@@ -44,6 +44,11 @@ def general_fit(model_func: Callable, x: np.ndarray, y: np.ndarray,
     -------
     ModelResult
         The result of the fitting operation from lmfit.
+
+    Notes
+    -----
+    The x-data used in the fit is stored in the ModelResult object as result.userdata['x'] for consistency.
+    It also exists as result.userkws[indep_var_name].
     """
         
     if xlim:
@@ -78,13 +83,24 @@ def general_fit(model_func: Callable, x: np.ndarray, y: np.ndarray,
     model = Model(model_func)
     model_result = model.fit(y, lm_params, **{indep_var_name: x}, weights=weights, **kwargs)
 
+    # Future proof storing x data in the ModelResult object
+    if hasattr(model_result, "userdata"):
+        print("Warning: model_result.userdata already exists.")
+        if "x" in model_result.userdata:
+            print("Warning: model_result.userdata['x'] already exists. This is unexpected.")
+            print(f"\tNot overwriting since x-data is also stored in model_result.userkws['{indep_var_name}'].")
+        else:
+            model_result.userdata["x"] = x
+    else:
+        model_result.userdata = {"x": x}
+
     if verbosity >= 1:
         bad_fit, message = detect_bad_fit(model_result)
         if bad_fit:
             print(f"Bad fit detected: {message}\n")
 
         if verbosity >= 2 or bad_fit:
-            model_result.params.pretty_print()
+            model_result.params.pretty_print();print('\n')
 
 
     return model_result
@@ -351,6 +367,8 @@ def detect_bad_fit(result: ModelResult, atol: float = 1e-10) -> tuple[bool, str]
 
     # Check if parameters are at bounds
     for name, param in result.params.items():
+        if not param.vary:
+            continue
         if np.isclose(param.value, param.min):
             bad = True
             message += f"\n\tParameter {name} is at or near its lower bound: {param.min}."

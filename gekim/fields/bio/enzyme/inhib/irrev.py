@@ -2,6 +2,7 @@ import numpy as np
 from lmfit import Parameters
 from lmfit.model import ModelResult
 from typing import Union
+from multiprocessing import Pool, cpu_count
 from .....utils.helpers import update_dict_with_subset
 from .....utils.fitting import general_fit, merge_params
 
@@ -47,7 +48,7 @@ def kobs_uplim_fit_to_occ_final_wrt_t(t, occ_final, nondefault_params: Union[dic
         # Observed rate constant
         default_params.add('kobs', value=0.01, vary=True, min=0, max=np.inf)
         # Total concentration of E over all species
-        default_params.add('Etot', value=1, vary=True, min=0, max=np.inf)
+        default_params.add('Etot', value=1, vary=False, min=0, max=np.inf)
         # Scales the upper limit of the curve
         default_params.add('uplim', value=1, vary=True, min=0, max=np.inf)
         ```
@@ -79,7 +80,7 @@ def kobs_uplim_fit_to_occ_final_wrt_t(t, occ_final, nondefault_params: Union[dic
 
     default_params = Parameters()
     default_params.add('kobs', value=0.01, vary=True, min=0, max=np.inf)
-    default_params.add('Etot', value=1, vary=True, min=0, max=np.inf)
+    default_params.add('Etot', value=1, vary=False, min=0, max=np.inf)
     default_params.add('uplim', value=1, vary=True, min=0, max=np.inf)
 
     lm_params = merge_params(default_params, nondefault_params)
@@ -134,7 +135,7 @@ def kobs_KI_uplim_fit_to_occ_total_wrt_t(t: np.ndarray, occ_tot: np.ndarray, non
     nondefault_params : dict or Parameters, optional
         A structured dictionary of parameters with 'value','vary', and 'bound' keys or a lmfit.Parameters object.
         Defaults:
-       ```python
+        ```python
         # Observed rate constant
         default_params.add('kobs', value=0.01, vary=True, min=0, max=np.inf)
         # Initial concentration of the (saturating) inhibitor
@@ -142,9 +143,9 @@ def kobs_KI_uplim_fit_to_occ_total_wrt_t(t: np.ndarray, occ_tot: np.ndarray, non
         # Inhibition constant where kobs = kinact/2.
         default_params.add('KI', value=10, vary=True, min=0, max=np.inf)
         # Total concentration of E across all species
-        default_params.add('Etot', value=1, vary=True, min=0, max=np.inf)
+        default_params.add('Etot', value=1, vary=False, min=0, max=np.inf)
         # Scales the upper limit of the curve
-        default_params.add('uplim', value=1, vary=True, min=0, max=1)      
+        default_params.add('uplim', value=1, vary=True, min=0, max=np.inf)      
         ```
         Example dict of nondefaults:
         ```python
@@ -175,8 +176,8 @@ def kobs_KI_uplim_fit_to_occ_total_wrt_t(t: np.ndarray, occ_tot: np.ndarray, non
     default_params.add('kobs', value=0.01, vary=True, min=0, max=np.inf)
     default_params.add('concI0', value=100, vary=True, min=0, max=np.inf)
     default_params.add('KI', value=10, vary=True, min=0, max=np.inf)
-    default_params.add('Etot', value=1, vary=True, min=0, max=np.inf)
-    default_params.add('uplim', value=1, vary=True, min=0, max=1)
+    default_params.add('Etot', value=1, vary=False, min=0, max=np.inf)
+    default_params.add('uplim', value=1, vary=True, min=0, max=np.inf)
 
     lm_params = merge_params(default_params, nondefault_params)
     return general_fit(occ_total_wrt_t, t, occ_tot, lm_params, xlim=xlim, weights_kde=weights_kde, weights=weights, verbosity=verbosity, **kwargs)
@@ -224,7 +225,7 @@ def KI_kinact_n_fit_to_kobs_wrt_concI0(concI0: np.ndarray, kobs: np.ndarray, non
     nondefault_params : dict or Parameters, optional
         A structured dictionary of parameters with 'value','vary', and 'bound' keys or a lmfit.Parameters object.
         Defaults:
-       ```python
+        ```python
         default_params.add('KI', value=100, vary=True, min=0, max=np.inf)
         default_params.add('kinact', value=0.01, vary=True, min=0, max=np.inf)
         default_params.add('n', value=1, vary=False, min=0, max=np.inf)   
@@ -301,7 +302,7 @@ def dose_response_fit(dose: np.ndarray, response: np.ndarray, nondefault_params:
     nondefault_params : dict or Parameters, optional
         A structured dictionary of parameters with 'value','vary', and 'bound' keys or a lmfit.Parameters object.
         Defaults:
-       ```python
+        ```python
         default_params.add('Khalf', value=100, vary=True, min=0, max=np.inf)
         default_params.add('kinact', value=0.01, vary=True, min=0, max=np.inf)
         default_params.add('t', value=3600, vary=False)
@@ -444,5 +445,9 @@ class Experiments:
     """
     #TODO: timecourse and KI/kinact 
     @staticmethod
-    def timecourse(t,system):
+    def timecourse(t,scheme,**kwargs):
+        return NotImplementedError()
+
+    @staticmethod
+    def dose_rate(dose,scheme,**kwargs):
         return NotImplementedError()

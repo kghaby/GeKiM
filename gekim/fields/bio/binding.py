@@ -49,7 +49,7 @@ def dose_response_fit(dose: np.ndarray, response: np.ndarray, nondefault_params:
     nondefault_params : dict or Parameters, optional
         A structured dictionary of parameters with 'value','vary', and 'bound' keys or a lmfit.Parameters object.
         Defaults:
-       ```python
+        ```python
         default_params.add('Khalf', value=100, vary=True, min=0, max=np.inf)
         default_params.add('uplim', value=1, vary=True)
         default_params.add('n', value=1, vary=True, min=0, max=np.inf)

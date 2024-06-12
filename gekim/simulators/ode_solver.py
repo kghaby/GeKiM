@@ -360,7 +360,8 @@ class ODESolver(BaseSimulator):
             self.system.log.info("Not returning raw solver output. Use output_raw=True to return raw data.\n")
             return
 
-    def estimate_t_span(self, J0: np.ndarray) -> tuple[float, float]:
+    @staticmethod
+    def estimate_t_span(J0: np.ndarray) -> tuple[float, float]:
         """
         Estimate the timespan needed for convergence based on the 
         smallest magnitude of the Jacobian eigenvalues at initial conditions

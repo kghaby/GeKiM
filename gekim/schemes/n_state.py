@@ -1,6 +1,6 @@
 import numpy as np
 import re
-import copy
+from copy import deepcopy
 from sympy import symbols
 from collections import defaultdict
 from typing import Union
@@ -232,7 +232,7 @@ class NState:
             self.log = Logger(quiet=quiet, logfilename=logfilename)
 
             self._validate_config(config)
-            self.config = copy.deepcopy(config)
+            self.config = deepcopy(config)
         
             self.species = {
                 name: Species(

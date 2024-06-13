@@ -289,7 +289,9 @@ class ODESolver(BaseSimulator):
         rtol : float, optional
             Relative tolerance for the solver. Default is 1e-3.
         atol : float, optional
-            Absolute tolerance for the solver. Default is 0. If atol == 0, atol = 1e-6 * <the smallest nonzero value of y0>.
+            Absolute tolerance for the solver. Default is 0. 
+            If atol == 0, atol = 1e-6 * <the smallest nonzero value of y0>.
+                Dynamically chosen per y0.
         dense_output : bool, optional
             If True, save a `scipy.integrate._ivp.common.OdeSolution` instance to `SYSTEM.simout.soln_continuous(t)`.
             If using multiple y0's, this will be a list of instances that share indexing with the other outputs,
@@ -325,14 +327,18 @@ class ODESolver(BaseSimulator):
         y0_mat_len = len(y0_mat)
         self.system.log.info(f"Solving the timecourse from {y0_mat_len} initial concentration vectors...")
 
-        solns = []
-        for y0 in y0_mat:
-            if atol == 0:
-                atol = np.min(y0[y0 != 0])*1e-6 # smallest nonzero value of the Jacobian
-                self.system.log.info(f"\tSetting atol to {atol:.2e}, 1e-6 * <the smallest nonzero value of y0>.")
+        input_atol = atol
+        input_t_eval = t_eval
+        input_t_span = t_span
+        solns = [None]*y0_mat_len
+        for i,y0 in enumerate(y0_mat):
+            if input_atol == 0:
+                min_y0 = np.min(y0[y0 != 0])
+                atol = min_y0*1e-6 # smallest nonzero value of the Jacobian
+                self.system.log.info(f"\tSetting atol to {atol:.2e}, 1e-6 * <the smallest nonzero value of y0 ({min_y0})> .")
                 
-            if t_span is None:
-                if t_eval is None:
+            if input_t_span is None:
+                if input_t_eval is None:
                     J0 = self.system.simin["J_func_wrap"](None, y0)
                     t_span = self.estimate_t_span(J0)
                     self.system.log.info(f"\tEstimated time scale: {t_span[1]:.2e} (1/<rate constant units>)")
@@ -344,7 +350,7 @@ class ODESolver(BaseSimulator):
                 # vectorized=True makes legacy rate func slower bc low len(y0) I think
             if not soln.success:
                 raise RuntimeError("FAILED: " + soln.message)
-            solns.append(soln)
+            solns[i] = soln
             
         self.system.log.info("ODE's solved successfully. Saving data...")
 

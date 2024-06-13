@@ -1,6 +1,8 @@
 import numpy as np
-import math
-from itertools import product
+from math import log10, floor
+import sys
+from io import StringIO
+from itertools import product,islice
 
 
 def rate_pair_from_P(int_OOM,P_B) -> tuple:
@@ -58,12 +60,12 @@ def round_sig(num: float, sig_figs: int = 3, autoformat=True):
     if num == 0:
         return 0.0
 
-    order_of_magnitude = math.floor(math.log10(abs(num)))
+    order_of_magnitude = floor(log10(abs(num)))
     shift = sig_figs - 1 - order_of_magnitude
 
     # Scale the number, round it, and scale it back
     scaled_num = num * (10 ** shift)
-    rounded_scaled_num = math.floor(scaled_num + 0.5)
+    rounded_scaled_num = floor(scaled_num + 0.5)
     result = rounded_scaled_num / (10 ** shift)
 
     # Handling scientific notation conditionally
@@ -178,3 +180,32 @@ def arr2float(value: np.ndarray):
             raise ValueError("Array is not size 1.")
     else:
         return value
+
+
+def chunks(data, size):
+    """
+    Split data into chunks with a specified size.
+    """
+    it = iter(data)
+    for _ in range(0, len(data), size):
+        yield list(islice(it, size))
+
+def printer(queue):
+    """Function to print messages from the queue."""
+    while True:
+        msg = queue.get()
+        if msg == "DONE":
+            break
+        print(msg)
+
+class CaptureOutput(list):
+    """Custom output stream to capture prints."""
+    def __enter__(self):
+        self._stdout = sys.stdout
+        self._stringio = StringIO()
+        sys.stdout = self._stringio
+        return self
+
+    def __exit__(self, *args):
+        self.extend(self._stringio.getvalue().splitlines())
+        sys.stdout = self._stdout

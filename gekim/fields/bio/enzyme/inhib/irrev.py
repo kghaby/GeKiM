@@ -2,10 +2,11 @@ import numpy as np
 from lmfit import Parameters
 from lmfit.model import ModelResult
 from typing import Union
-from multiprocessing import Pool, cpu_count
+from multiprocessing import Pool, cpu_count, Queue, Process
+
 from .....schemes import NState
 from .....simulators import ODESolver
-from .....utils.helpers import update_dict
+from .....utils.helpers import update_dict, chunks, printer, CaptureOutput
 from .....utils.fitting import general_fit, merge_params
 #from .....utils.experiments import ExperimentResult
 
@@ -448,54 +449,95 @@ class Experiments:
     """
     
     @staticmethod
-    def timecourse(scheme: dict, sim_kwargs=None, fit_occ_kwargs=None):
+    def timecourse(scheme: dict, dose_spname: str = "I", CO_spname: str = "EI", E_spname: str = "E", 
+                    system_kwargs: dict = None, sim_kwargs: dict = None, fit_occ_kwargs: dict = None) -> tuple[NState, ModelResult]:
         """
         A macro for doing timecourses.
         """
-        raise NotImplementedError()
         
-        default_sim_kwargs = {}
-        sim_kwargs = update_dict(default_sim_kwargs, sim_kwargs)
+        default_system_kwargs = {
+            "quiet": True,
+        }
+        system_kwargs = update_dict(default_system_kwargs, system_kwargs)
 
-        default_fit_occ_kwargs = {}
-        fit_occ_kwargs = update_dict(default_fit_occ_kwargs, fit_occ_kwargs)
-
-        system = gk.schemes.NState(scheme,quiet=True)
-        system.simulator = gk.simulators.ODESolver(system)
-        system.simulator.simulate(**sim_kwargs)
-    
-        return system
-    
-    @staticmethod
-    def sim_dose(args):
-        i, dose, scheme, dose_spname, CO_spname, sim_kwargs, fit_occ_kwargs = args
-        system = NState(scheme,quiet=True)
-        system.species[dose_spname].y0 = dose
-        system.simulator = ODESolver(system)
-        system.simulator.simulate(**sim_kwargs)
-
-        fit_output = kobs_uplim_fit_to_occ_final_wrt_t(
-                system.simout["t"],
-                system.species[CO_spname].simout["y"],
-                **fit_occ_kwargs)
-
-        return i, fit_output.best_values["kobs"]
-
-    @staticmethod
-    def dose_rate(dose_arr, scheme: dict, dose_spname: str = "I", CO_spname: str = "EI", E_spname: str = "E", num_cores=1, 
-                    sim_kwargs=None, fit_occ_kwargs=None, fit_kobs_kwargs=None):
-        """
-        A macro for doing timecourses with variable [I].
-        """
-        num_cores = min(num_cores, cpu_count())
-
-        default_sim_kwargs = {}
+        default_sim_kwargs = {
+        }
         sim_kwargs = update_dict(default_sim_kwargs, sim_kwargs)
 
         default_fit_occ_kwargs = {
             "nondefault_params" : {
                     "Etot": {"vary": False, "value": scheme["species"][E_spname]["y0"]},
-                    "uplim": {"vary": False, "value": 1}
+                    "uplim": {"vary": False, "value": 1},
+                },
+            "verbosity": 2,
+        }
+        fit_occ_kwargs = update_dict(default_fit_occ_kwargs, fit_occ_kwargs)
+
+        system = gk.schemes.NState(scheme,**system_kwargs)
+        system.simulator = gk.simulators.ODESolver(system)
+        system.simulator.simulate(**sim_kwargs)
+    
+        x_data = system.simout["t"]
+        y_data = system.species[CO_spname].simout["y"]
+        fit_output = kobs_uplim_fit_to_occ_final_wrt_t(x_data,y_data,**fit_occ_kwargs)
+        fit_output.best_values["kobs"]
+
+        return system, fit_output
+    
+    @staticmethod
+    def _sim_dose(args):
+        indices, doses, scheme, dose_spname, CO_spname, system_kwargs, sim_kwargs, fit_occ_kwargs = args
+
+        with CaptureOutput() as output:
+            system = NState(scheme,**system_kwargs)
+            system.species[dose_spname].y0 = doses
+            system.simulator = ODESolver(system)
+            system.simulator.simulate(**sim_kwargs)
+
+            kobs_arr_mini = np.zeros_like(doses)
+            for i,dose in enumerate(doses):
+                # The type of the sim output depends on the size of the initial concentrations. 
+                # Will be a list of arrays if len(doses) > 1
+                if len(doses) > 1:
+                    x_data = system.simout["t"][i]
+                    y_data = system.species[CO_spname].simout["y"][i]
+                else:
+                    x_data = system.simout["t"]
+                    y_data = system.species[CO_spname].simout["y"]
+                
+                fit_output = kobs_uplim_fit_to_occ_final_wrt_t(x_data,y_data,**fit_occ_kwargs)
+                kobs_arr_mini[i] = fit_output.best_values["kobs"]
+
+        return indices, kobs_arr_mini, list(output)
+
+    @staticmethod
+    def dose_rate(scheme: dict, dose_arr: np.ndarray, dose_spname: str = "I", CO_spname: str = "EI", E_spname: str = "E", num_cores=1, 
+                    system_kwargs: dict = None, sim_kwargs: dict = None, fit_occ_kwargs: dict = None, fit_kobs_kwargs: dict = None):
+        """
+        A macro for doing timecourses with variable [I].
+        Uses multiprocessing.
+
+        Notes
+        -----
+        Different processes may have different atols if atol0=0 and dose_arr ranges 
+            from being smaller to larger than `scheme["species"][E_spname]["y0"]`
+        This is because if atol==0 is chosen in `simulate()` to be `1e-6*min(y0[y0!=0])`
+        """
+        num_cores = min(num_cores, cpu_count())
+
+        default_system_kwargs = {
+            "quiet": True,
+        }
+        system_kwargs = update_dict(default_system_kwargs, system_kwargs)
+
+        default_sim_kwargs = {
+        }
+        sim_kwargs = update_dict(default_sim_kwargs, sim_kwargs)
+
+        default_fit_occ_kwargs = {
+            "nondefault_params" : {
+                    "Etot": {"vary": False, "value": scheme["species"][E_spname]["y0"]},
+                    "uplim": {"vary": False, "value": 1},
                 },
             "verbosity": 1,
         }
@@ -510,14 +552,31 @@ class Experiments:
         fit_kobs_kwargs = update_dict(default_fit_kobs_kwargs, fit_kobs_kwargs)
             
 
+        # This is a multiprocessing queue to prevent overlapping prints from different processes
+        queue = Queue()
+        printer_process = Process(target=printer, args=(queue,))
+        printer_process.start()
+                     
+        # Set up process inputs
+        chunked_indices = list(chunks(range(len(dose_arr)), len(dose_arr) // num_cores + 1))
+        chunked_doses = list(chunks(dose_arr, len(dose_arr) // num_cores + 1))
 
-        args_list = [(i, dose, scheme, dose_spname, CO_spname, sim_kwargs, fit_occ_kwargs) for i, dose in enumerate(dose_arr)]
-        kobs_arr = np.zeros_like(dose_arr)
+        args_list = [(indices, doses, scheme.copy(), dose_spname, CO_spname, system_kwargs, sim_kwargs, fit_occ_kwargs)
+                     for indices, doses in zip(chunked_indices, chunked_doses)]
+
+
+        # Run the simulations in parallel
         with Pool(num_cores) as pool:
-            results = pool.map(Experiments.sim_dose, args_list)
+            results = pool.map(Experiments._sim_dose, args_list)
 
-        for i, kobs in results:
-            kobs_arr[i] = kobs
+        kobs_arr = np.zeros_like(dose_arr) 
+        for indices, kobs_chunk, output in results:
+            kobs_arr[indices[0]:indices[0] + len(kobs_chunk)] = kobs_chunk
+            for line in output:
+                queue.put(line)
+
+        queue.put("DONE")
+        printer_process.join()
 
         fit_output = KI_kinact_n_fit_to_kobs_wrt_concI0(dose_arr, kobs_arr, **fit_kobs_kwargs)
 

@@ -3,8 +3,11 @@ from lmfit import Parameters
 from lmfit.model import ModelResult
 from typing import Union
 from multiprocessing import Pool, cpu_count
-from .....utils.helpers import update_dict_with_subset
+from .....schemes import NState
+from .....simulators import ODESolver
+from .....utils.helpers import update_dict
 from .....utils.fitting import general_fit, merge_params
+#from .....utils.experiments import ExperimentResult
 
 #TODO: fit to scheme. meaning yuo make a scheme without values for the transitions and fit it to occ data to see what values of rates satisfy curve
 
@@ -437,17 +440,85 @@ class Params:
         The covalent efficiency is calculated as the ratio of 
         the inactivation rate constant (kinact) to the inhibition constant (KI).
         """
-        return kinact/Parameters.KI(kon, koff, kinact)
+        return kinact/Params.KI(kon, koff, kinact)
 
 class Experiments:
     """
     Common place for experimental setups in covalent inhibition literature.
     """
-    #TODO: timecourse and KI/kinact 
+    
     @staticmethod
-    def timecourse(t,scheme,**kwargs):
-        return NotImplementedError()
+    def timecourse(scheme: dict, sim_kwargs=None, fit_occ_kwargs=None):
+        """
+        A macro for doing timecourses.
+        """
+        raise NotImplementedError()
+        
+        default_sim_kwargs = {}
+        sim_kwargs = update_dict(default_sim_kwargs, sim_kwargs)
+
+        default_fit_occ_kwargs = {}
+        fit_occ_kwargs = update_dict(default_fit_occ_kwargs, fit_occ_kwargs)
+
+        system = gk.schemes.NState(scheme,quiet=True)
+        system.simulator = gk.simulators.ODESolver(system)
+        system.simulator.simulate(**sim_kwargs)
+    
+        return system
+    
+    @staticmethod
+    def sim_dose(args):
+        i, dose, scheme, dose_spname, CO_spname, sim_kwargs, fit_occ_kwargs = args
+        system = NState(scheme,quiet=True)
+        system.species[dose_spname].y0 = dose
+        system.simulator = ODESolver(system)
+        system.simulator.simulate(**sim_kwargs)
+
+        fit_output = kobs_uplim_fit_to_occ_final_wrt_t(
+                system.simout["t"],
+                system.species[CO_spname].simout["y"],
+                **fit_occ_kwargs)
+
+        return i, fit_output.best_values["kobs"]
 
     @staticmethod
-    def dose_rate(dose,scheme,**kwargs):
-        return NotImplementedError()
+    def dose_rate(dose_arr, scheme: dict, dose_spname: str = "I", CO_spname: str = "EI", E_spname: str = "E", num_cores=1, 
+                    sim_kwargs=None, fit_occ_kwargs=None, fit_kobs_kwargs=None):
+        """
+        A macro for doing timecourses with variable [I].
+        """
+        num_cores = min(num_cores, cpu_count())
+
+        default_sim_kwargs = {}
+        sim_kwargs = update_dict(default_sim_kwargs, sim_kwargs)
+
+        default_fit_occ_kwargs = {
+            "nondefault_params" : {
+                    "Etot": {"vary": False, "value": scheme["species"][E_spname]["y0"]},
+                    "uplim": {"vary": False, "value": 1}
+                },
+            "verbosity": 1,
+        }
+        fit_occ_kwargs = update_dict(default_fit_occ_kwargs, fit_occ_kwargs)
+
+        default_fit_kobs_kwargs = {
+            "nondefault_params" : {
+                    "n": {"vary": False}
+                    },
+            "verbosity": 2,
+        }
+        fit_kobs_kwargs = update_dict(default_fit_kobs_kwargs, fit_kobs_kwargs)
+            
+
+
+        args_list = [(i, dose, scheme, dose_spname, CO_spname, sim_kwargs, fit_occ_kwargs) for i, dose in enumerate(dose_arr)]
+        kobs_arr = np.zeros_like(dose_arr)
+        with Pool(num_cores) as pool:
+            results = pool.map(Experiments.sim_dose, args_list)
+
+        for i, kobs in results:
+            kobs_arr[i] = kobs
+
+        fit_output = KI_kinact_n_fit_to_kobs_wrt_concI0(dose_arr, kobs_arr, **fit_kobs_kwargs)
+
+        return fit_output

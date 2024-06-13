@@ -72,33 +72,37 @@ def round_sig(num: float, sig_figs: int = 3, autoformat=True):
     else:
         return result
 
-def update_dict_with_subset(defaults: dict, updates: dict):
+def update_dict(defaults: dict, updates: dict = None, subset=False) -> dict:
     """
-    Recursively updates the default dictionary with values from the update dictionary,
-    ensuring that only the keys present in the defaults are updated.
+    Recursively updates the default dictionary with values from the update dictionary.
 
     Parameters
     ----------
     defaults : dict
-        The default dictionary containing all allowed keys with their default values.
+        The default dictionary containing initial key-value pairs.
     updates : dict
-        The update dictionary containing keys to update in the defaults dictionary.
+        The update dictionary containing key-value pairs to merge into the defaults dictionary.
+    subset : bool
+        If True, only updates keys present in defaults. If False, adds new keys from updates.
 
     Returns
     -------
     dict
-        The updated dictionary.
+        The merged dictionary.
     """
+    if updates is None:
+        return defaults
 
     for key, update_value in updates.items():
-        if key in defaults:
-            # If both the default and update values are dictionaries, recurse
-            if isinstance(defaults[key], dict) and isinstance(update_value, dict):
-                defaults[key] = update_dict_with_subset(defaults[key], update_value)
-            else:
-                defaults[key] = update_value
-
+        if subset and key not in defaults:
+            continue
+        # Recurse through dictionaries
+        if key in defaults and isinstance(defaults[key], dict) and isinstance(update_value, dict):
+            defaults[key] = update_dict(defaults[key], update_value, subset=subset)
+        else:
+            defaults[key] = update_value
     return defaults
+    
 
 def compare_dictionaries(dict1, dict2, rel_tol=1e-9, abs_tol=0.0):
     """

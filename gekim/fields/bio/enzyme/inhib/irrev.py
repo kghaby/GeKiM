@@ -473,8 +473,8 @@ class Experiments:
         }
         fit_occ_kwargs = update_dict(default_fit_occ_kwargs, fit_occ_kwargs)
 
-        system = gk.schemes.NState(scheme,**system_kwargs)
-        system.simulator = gk.simulators.ODESolver(system)
+        system = NState(scheme,**system_kwargs)
+        system.simulator = ODESolver(system)
         system.simulator.simulate(**sim_kwargs)
     
         x_data = system.simout["t"]

@@ -1,5 +1,7 @@
 import colorsys
 import numpy as np 
+from matplotlib.colors import LinearSegmentedColormap
+from colorsys import rgb_to_hsv, hsv_to_rgb
 
 def assign_colors_to_species(schemes: dict, saturation_range: tuple = (0.5, 0.7), lightness_range: tuple = (0.3, 0.4), 
                             method: str = None, offset: float = 0, overwrite_existing=False, seed: int = None):
@@ -7,16 +9,25 @@ def assign_colors_to_species(schemes: dict, saturation_range: tuple = (0.5, 0.7)
     Assigns a distinct and aesthetically pleasing color to each species in a dictionary or a single kinetic scheme.
     Uses either a fixed or golden ratio based distribution for hues. Optionally seeds the randomness for consistent results.
 
-    Args:
-    schemes (dict): Dictionary of kinetic scheme dictionaries or a single kinetic scheme dictionary.
-    saturation_range (tuple): Min and max saturation values.
-    lightness_range (tuple): Min and max lightness values.
-    method (str): "GR" for golden ratio hue distribution; None for linear distribution.
-    offset (float): Offset value for the hues.
-    overwrite_existing (bool): If True, overwrite existing colors; if False, assign colors only to species without colors.
-    seed (int): Seed for random number generator for reproducible color variations.
+    Parameters
+    ----------
+    schemes : dict
+        Dictionary of kinetic scheme dictionaries or a single kinetic scheme dictionary.
+    saturation_range : tuple
+        Min and max saturation values.
+    lightness_range : tuple
+        Min and max lightness values.
+    method : str
+        "GR" for golden ratio hue distribution; None for linear distribution.
+    offset : float
+        Offset value for the hues.
+    overwrite_existing : bool
+        If True, overwrite existing colors; if False, assign colors only to species without colors.
+    seed : int 
+        Seed for random number generator for reproducible color variations.
 
-    Returns:
+    Returns
+    -------
     dict: Updated schemes with assigned colors. Edits original input dict.
     """
     #TODO: handle list of schemes and NState class
@@ -79,3 +90,19 @@ def assign_colors_to_species(schemes: dict, saturation_range: tuple = (0.5, 0.7)
     if single_scheme:
         schemes = schemes['single_scheme']
     return schemes
+
+def scale_cmap_saturation(cmap: LinearSegmentedColormap, scalar:float = 1.5) -> LinearSegmentedColormap:
+    """
+    Scale the saturation of a matplotlib colormap. 
+    
+    Returns
+    -------
+    LinearSegmentedColormap: Scaled colormap named `cmap.name`+'scaledsat'
+    """
+    colors = cmap(np.linspace(0, 1, cmap.N)) 
+    hsv = np.array([rgb_to_hsv(*color[:3]) for color in colors]) # convert to hsv
+    hsv[:, 1] = np.clip(hsv[:, 1] * scalar, 0, 1)
+    new_colors = np.array([hsv_to_rgb(*hsv_color) for hsv_color in hsv]) # convert back to rgb
+    return LinearSegmentedColormap.from_list(f"{cmap.name}_scaledsat", new_colors)
+
+    

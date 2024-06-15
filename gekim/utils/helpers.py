@@ -41,7 +41,7 @@ def round_sig(num: float, sig_figs: int = 3, autoformat=True):
     """
     Round up using significant figures.
 
-    Parameters:
+    Parameters
     ----------
     num : float
         The number to be rounded.
@@ -51,7 +51,7 @@ def round_sig(num: float, sig_figs: int = 3, autoformat=True):
         If True (default), formats the result into scientific notation if the order of magnitude 
         is greater than +/- 3.
 
-    Returns:
+    Returns
     -------
     float or str
         The rounded number. If autoformat is True and the result is in scientific notation, 

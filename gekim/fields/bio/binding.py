@@ -1,5 +1,5 @@
 import numpy as np
-from lmfit import Parameters
+from lmfit import lmfitParameters
 from lmfit.model import ModelResult
 from typing import Union
 
@@ -34,7 +34,7 @@ def dose_response(dose: np.ndarray,Khalf: float,n=1,uplim=1,nonspecific_m=0):
     '''
     return uplim / (1+(Khalf/dose)**n) + nonspecific_m*dose
 
-def dose_response_fit(dose: np.ndarray, response: np.ndarray, nondefault_params: Union[dict,Parameters] = None, xlim: tuple = None, 
+def dose_response_fit(dose: np.ndarray, response: np.ndarray, nondefault_params: Union[dict,lmfitParameters] = None, xlim: tuple = None, 
                         weights_kde=False, weights: np.ndarray = None, verbosity=2, **kwargs) -> ModelResult:
     """
     Fit parameters (Khalf, kinact, n) to response with respect to dose using 
@@ -78,7 +78,7 @@ def dose_response_fit(dose: np.ndarray, response: np.ndarray, nondefault_params:
     lmfit.ModelResult
         The result of the fitting operation from lmfit.
     """
-    default_params = Parameters()
+    default_params = lmfitParameters()
     default_params.add('Khalf', value=100, vary=True, min=0, max=np.inf)
     default_params.add('uplim', value=1, vary=True)
     default_params.add('n', value=1, vary=True, min=0, max=np.inf)

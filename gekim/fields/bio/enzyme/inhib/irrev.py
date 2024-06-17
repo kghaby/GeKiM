@@ -1,5 +1,5 @@
 import numpy as np
-from lmfit import Parameters
+from lmfit import lmfitParameters
 from lmfit.model import ModelResult
 from typing import Union
 from multiprocessing import Pool, cpu_count, Queue, Process
@@ -34,7 +34,7 @@ def occ_final_wrt_t(t,kobs,Etot,uplim=1) -> np.ndarray:
     '''
     return uplim * Etot * (1 - np.e**(-kobs * t))
 
-def kobs_uplim_fit_to_occ_final_wrt_t(t, occ_final, nondefault_params: Union[dict,Parameters] = None, xlim: tuple = None, 
+def kobs_uplim_fit_to_occ_final_wrt_t(t, occ_final, nondefault_params: Union[dict,lmfitParameters] = None, xlim: tuple = None, 
                                         weights_kde=False, weights: np.ndarray = None, verbosity=2, **kwargs) -> ModelResult:
     '''
     Fit kobs to the first order occupancy over time.
@@ -82,7 +82,7 @@ def kobs_uplim_fit_to_occ_final_wrt_t(t, occ_final, nondefault_params: Union[dic
 
     '''
 
-    default_params = Parameters()
+    default_params = lmfitParameters()
     default_params.add('kobs', value=0.01, vary=True, min=0, max=np.inf)
     default_params.add('Etot', value=1, vary=False, min=0, max=np.inf)
     default_params.add('uplim', value=1, vary=True, min=0, max=np.inf)
@@ -124,7 +124,7 @@ def occ_total_wrt_t(t,kobs,concI0,KI,Etot,uplim=1):
     FO = 1 / (1 + (KI / concI0)) # Equilibrium occupancy of reversible portion
     return uplim * Etot * (1 - (1 - FO) * np.exp(-kobs * t))
 
-def kobs_KI_uplim_fit_to_occ_total_wrt_t(t: np.ndarray, occ_tot: np.ndarray, nondefault_params: Union[dict,Parameters] = None, xlim: tuple = None, 
+def kobs_KI_uplim_fit_to_occ_total_wrt_t(t: np.ndarray, occ_tot: np.ndarray, nondefault_params: Union[dict,lmfitParameters] = None, xlim: tuple = None, 
                                         weights_kde=False, weights: np.ndarray = None, verbosity=2, **kwargs) -> ModelResult:
     '''
     Fit kobs and KI to the total occupancy of all bound states over time, 
@@ -176,7 +176,7 @@ def kobs_KI_uplim_fit_to_occ_total_wrt_t(t: np.ndarray, occ_tot: np.ndarray, non
         The result of the fitting operation from lmfit.
 
     '''
-    default_params = Parameters()
+    default_params = lmfitParameters()
     default_params.add('kobs', value=0.01, vary=True, min=0, max=np.inf)
     default_params.add('concI0', value=100, vary=True, min=0, max=np.inf)
     default_params.add('KI', value=10, vary=True, min=0, max=np.inf)
@@ -214,7 +214,7 @@ def kobs_wrt_concI0(concI0,KI,kinact,n=1):
     '''
     return kinact / (1 + (KI / concI0)**n)
 
-def KI_kinact_n_fit_to_kobs_wrt_concI0(concI0: np.ndarray, kobs: np.ndarray, nondefault_params: Union[dict,Parameters] = None, xlim: tuple = None, 
+def KI_kinact_n_fit_to_kobs_wrt_concI0(concI0: np.ndarray, kobs: np.ndarray, nondefault_params: Union[dict,lmfitParameters] = None, xlim: tuple = None, 
                                         weights_kde=False, weights: np.ndarray = None, verbosity=2, **kwargs) -> ModelResult:
     """
     Fit parameters (KI, kinact, n) to kobs with respect to concI0 using 
@@ -259,7 +259,7 @@ def KI_kinact_n_fit_to_kobs_wrt_concI0(concI0: np.ndarray, kobs: np.ndarray, non
     
     Assumes that concI is constant over the timecourses where kobs is calculated. 
     """
-    default_params = Parameters()
+    default_params = lmfitParameters()
     default_params.add('KI', value=100, vary=True, min=0, max=np.inf)
     default_params.add('kinact', value=0.01, vary=True, min=0, max=np.inf)
     default_params.add('n', value=1, vary=True, min=0, max=np.inf)
@@ -291,7 +291,7 @@ def dose_response(dose: np.ndarray,Khalf: float, kinact: float, t: float, n=1):
     '''
     return (1 - np.exp(-kinact * t)) / (1 + (Khalf / dose)**n)
 
-def dose_response_fit(dose: np.ndarray, response: np.ndarray, nondefault_params: Union[dict,Parameters] = None, xlim: tuple = None, 
+def dose_response_fit(dose: np.ndarray, response: np.ndarray, nondefault_params: Union[dict,lmfitParameters] = None, xlim: tuple = None, 
                                         weights_kde=False, weights: np.ndarray = None, verbosity=2, **kwargs) -> ModelResult:
     """
     Fit parameters (Khalf, kinact, n) to response with respect to dose using 
@@ -335,7 +335,7 @@ def dose_response_fit(dose: np.ndarray, response: np.ndarray, nondefault_params:
     lmfit.ModelResult
         The result of the fitting operation from lmfit.
     """
-    default_params = Parameters()
+    default_params = lmfitParameters()
     default_params.add('Khalf', value=100, vary=True, min=0, max=np.inf)
     default_params.add('kinact', value=0.01, vary=True, min=0, max=np.inf)
     default_params.add('t', value=3600, vary=False)

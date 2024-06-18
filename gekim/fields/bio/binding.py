@@ -1,5 +1,5 @@
 import numpy as np
-from lmfit import lmfitParameters
+from lmfit import Parameters as lmfitParameters
 from lmfit.model import ModelResult
 from typing import Union
 

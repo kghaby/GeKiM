@@ -5,7 +5,7 @@ with open('requirements.txt') as f:
 
 setup(
     name='GeKiM', 
-    version='0.5.2', 
+    version='0.5.3', 
     author='Kyle Ghaby', 
     author_email='kyleghaby@gmail.com',  
     description='Generalized Kinetic Modeler: A Python package for modeling arbitrary kinetic schemes.',  

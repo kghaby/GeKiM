@@ -51,8 +51,8 @@ def dose_response_fit(dose: np.ndarray, response: np.ndarray, nondefault_params:
         Defaults:
         ```python
         default_params.add('Khalf', value=100, vary=True, min=0, max=np.inf)
-        default_params.add('uplim', value=1, vary=True)
         default_params.add('n', value=1, vary=True, min=0, max=np.inf)
+        default_params.add('uplim', value=1, vary=True)
         default_params.add('nonspecific_m', value=0, vary=False)
         ```
         Example dict of nondefaults:
@@ -80,8 +80,8 @@ def dose_response_fit(dose: np.ndarray, response: np.ndarray, nondefault_params:
     """
     default_params = lmfitParameters()
     default_params.add('Khalf', value=100, vary=True, min=0, max=np.inf)
-    default_params.add('uplim', value=1, vary=True)
     default_params.add('n', value=1, vary=True, min=0, max=np.inf)
+    default_params.add('uplim', value=1, vary=True)
     default_params.add('nonspecific_m', value=0, vary=False)
 
     lm_params = merge_params(default_params, nondefault_params)

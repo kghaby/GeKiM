@@ -342,8 +342,200 @@ def dose_response_fit(dose: np.ndarray, response: np.ndarray, nondefault_params:
     default_params.add('n', value=1, vary=True, min=0, max=np.inf)
 
     lm_params = merge_params(default_params, nondefault_params)
-    return general_fit(dose_response, dose, response, lm_params, xlim=xlim, weights_kde=weights_kde, weights=weights, verbosity=verbosity, **kwargs)
+    return general_fit(dose_response, dose, response, lm_params, xlim=xlim, weights_kde=weights_kde, 
+                        weights=weights, verbosity=verbosity, **kwargs)
 
+def occ_final_wrt_concI0(concI0: np.ndarray, t: float, KI: float, kinact: float,  n: float = 1, Etot: float = 1, 
+                        uplim: float = 1) -> np.ndarray:
+    '''
+    Calculate the occupancy of final occupancy (Occ_cov) with respect to dose.
+
+    Parameters
+    ----------
+    concI0 : np.ndarray
+        Array of initial concentrations of the inhibitor. Note that the 
+        inhibitor is assumed to be constant so that the initial concentration 
+        may be used in place of the remaining [I] at the endpoint.
+    t : float
+        Endpoint for the dosing.
+    KI : float
+        Inhibition constant, analogous to K_M.
+    kinact : float
+        Maximum potential rate of covalent bond formation.
+    Etot : float
+        Total concentration of E across all species. Default is 1. 
+        Leave as 1 to have the function return the fraction of total E.
+    uplim : float, optional
+        Upper limit scalar of the curve. The fraction of total E typically. Default is 1, i.e., 100%.
+
+    Returns
+    -------
+    np.ndarray
+        Occupancy of final occupancy (Occ_cov).
+    '''
+    kobs = kobs_wrt_concI0(concI0,KI,kinact,n=n)
+    return uplim * Etot * (1 - np.e**(-kobs * t))
+
+def fit_to_occ_final_wrt_concI0(concI0, occ_final, nondefault_params: Union[dict,lmfitParameters] = None, xlim: tuple = None, 
+                                        weights_kde=False, weights: np.ndarray = None, verbosity=2, **kwargs) -> ModelResult:
+    '''
+    Fit kobs to the first order occupancy over time.
+
+    Parameters
+    ----------
+    concI0 : np.ndarray
+        Array of initial concentrations of the inhibitor. Note that the 
+        inhibitor is assumed to be constant so that the initial concentration 
+        may be used in place of the remaining [I] at the endpoint.
+    occ_final : np.ndarray
+        Array of observed occupancy, i.e. concentration.
+    nondefault_params : dict or Parameters, optional
+        A structured dictionary of parameters with 'value','vary', and 'bound' keys or a lmfit.Parameters object.
+        Defaults:
+        ```python
+        default_params.add('t', value=3600, vary=False, min=0, max=np.inf)
+        default_params.add('KI', value=100, vary=True, min=0, max=np.inf)
+        default_params.add('kinact', value=0.01, vary=True, min=0, max=np.inf)
+        default_params.add('n', value=1, vary=False, min=0, max=np.inf)
+        default_params.add('Etot', value=1, vary=False, min=0, max=np.inf)
+        default_params.add('uplim', value=1, vary=False, min=0, max=np.inf)
+        ```
+        Example dict of nondefaults:
+        ```python
+        nondefault_params = {
+            "Etot": {"vary": False, "value": 0.5},  
+            "uplim": {"vary": False},    
+        }
+        ```
+    xlim : tuple, optional
+        Limits for the time points considered in the fit (min_t, max_t).
+    weights_kde : bool, optional
+        If True, calculate the density of the x-values and use the normalized reciprocol as weights. Similar to 1/sigma for scipy.curve_fit.
+        Helps distribute weight over unevenly-spaced points. Default is False.
+    weights : np.ndarray, optional
+        weights parameter for fitting. This argument is overridden if weights_kde=True. Default is None.
+    verbosity : int, optional
+        0: print nothing. 1: print upon bad fit. 2: print always. Default is 2.
+    kwargs : dict, optional
+        Additional keyword arguments to pass to the lmfit Model.fit function.
+
+    Returns
+    -------
+    lmfit.ModelResult
+        The result of the fitting operation from lmfit.
+
+    '''
+
+    default_params = lmfitParameters()
+    default_params.add('t', value=3600, vary=False, min=0, max=np.inf)
+    default_params.add('KI', value=100, vary=True, min=0, max=np.inf)
+    default_params.add('kinact', value=0.01, vary=True, min=0, max=np.inf)
+    default_params.add('n', value=1, vary=False, min=0, max=np.inf)
+    default_params.add('Etot', value=1, vary=False, min=0, max=np.inf)
+    default_params.add('uplim', value=1, vary=False, min=0, max=np.inf)
+
+
+    lm_params = merge_params(default_params, nondefault_params)
+
+    return general_fit(occ_final_wrt_concI0, concI0, occ_final, lm_params, xlim=xlim, weights_kde=weights_kde, weights=weights, verbosity=verbosity, **kwargs)
+
+def occ_final_wrt_concI0_norm(concI0: np.ndarray, t: float, KI: float, kinact: float,  n: float = 1, Etot: float = 1, 
+                        uplim: float = 1) -> np.ndarray:
+    '''
+    Calculate the occupancy of final occupancy (Occ_cov) with respect to dose.
+    Assumes that data is normalized to the max response.
+
+    Parameters
+    ----------
+    concI0 : np.ndarray
+        Array of initial concentrations of the inhibitor. Note that the 
+        inhibitor is assumed to be constant so that the initial concentration 
+        may be used in place of the remaining [I] at the endpoint.
+    t : float
+        Endpoint for the dosing.
+    KI : float
+        Inhibition constant, analogous to K_M.
+    kinact : float
+        Maximum potential rate of covalent bond formation.
+    Etot : float
+        Total concentration of E across all species. Default is 1. 
+        Leave as 1 to have the function return the fraction of total E.
+    uplim : float, optional
+        Upper limit scalar of the curve. The fraction of total E typically. Default is 1, i.e., 100%.
+
+    Returns
+    -------
+    np.ndarray
+        Occupancy of final occupancy (Occ_cov).
+    '''
+    kobs = kobs_wrt_concI0(concI0,KI,kinact,n=n)
+    return uplim * Etot * (1 - np.e**(-kobs * t))/(1 - np.e**(-kinact * t))
+
+def fit_to_occ_final_wrt_concI0_norm(concI0, occ_final, nondefault_params: Union[dict,lmfitParameters] = None, xlim: tuple = None, 
+                                        weights_kde=False, weights: np.ndarray = None, verbosity=2, **kwargs) -> ModelResult:
+    '''
+    Fit kobs to the first order occupancy over time.
+
+    Parameters
+    ----------
+    concI0 : np.ndarray
+        Array of initial concentrations of the inhibitor. Note that the 
+        inhibitor is assumed to be constant so that the initial concentration 
+        may be used in place of the remaining [I] at the endpoint.
+    occ_final : np.ndarray
+        Array of observed occupancy, i.e. concentration.
+    nondefault_params : dict or Parameters, optional
+        A structured dictionary of parameters with 'value','vary', and 'bound' keys or a lmfit.Parameters object.
+        Defaults:
+        ```python
+        default_params.add('t', value=3600, vary=False, min=0, max=np.inf)
+        default_params.add('KI', value=100, vary=True, min=0, max=np.inf)
+        default_params.add('kinact', value=0.01, vary=True, min=0, max=np.inf)
+        default_params.add('n', value=1, vary=False, min=0, max=np.inf)
+        default_params.add('Etot', value=1, vary=False, min=0, max=np.inf)
+        default_params.add('uplim', value=1, vary=False, min=0, max=np.inf)
+        ```
+        Example dict of nondefaults:
+        ```python
+        nondefault_params = {
+            "Etot": {"vary": False, "value": 0.5},  
+            "uplim": {"vary": False},    
+        }
+        ```
+    xlim : tuple, optional
+        Limits for the time points considered in the fit (min_t, max_t).
+    weights_kde : bool, optional
+        If True, calculate the density of the x-values and use the normalized reciprocol as weights. Similar to 1/sigma for scipy.curve_fit.
+        Helps distribute weight over unevenly-spaced points. Default is False.
+    weights : np.ndarray, optional
+        weights parameter for fitting. This argument is overridden if weights_kde=True. Default is None.
+    verbosity : int, optional
+        0: print nothing. 1: print upon bad fit. 2: print always. Default is 2.
+    kwargs : dict, optional
+        Additional keyword arguments to pass to the lmfit Model.fit function.
+
+    Returns
+    -------
+    lmfit.ModelResult
+        The result of the fitting operation from lmfit.
+
+    '''
+
+    default_params = lmfitParameters()
+    default_params.add('t', value=3600, vary=False, min=0, max=np.inf)
+    default_params.add('KI', value=100, vary=True, min=0, max=np.inf)
+    default_params.add('kinact', value=0.01, vary=True, min=0, max=np.inf)
+    default_params.add('n', value=1, vary=False, min=0, max=np.inf)
+    default_params.add('Etot', value=1, vary=False, min=0, max=np.inf)
+    default_params.add('uplim', value=1, vary=False, min=0, max=np.inf)
+
+
+    lm_params = merge_params(default_params, nondefault_params)
+
+    return general_fit(occ_final_wrt_concI0_norm, concI0, occ_final, lm_params, xlim=xlim, weights_kde=weights_kde, weights=weights, verbosity=verbosity, **kwargs)
+
+
+    
 class Params:
     """
     Common place for parameters found in covalent inhibition literature.

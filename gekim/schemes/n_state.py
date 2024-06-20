@@ -403,11 +403,36 @@ class NState:
         elif blacklist:
             species_names = [name for name in species_names if name not in blacklist]
 
-        try:
-            total_y = np.sum([self.species[name].simout["y"] for name in species_names], axis=0)
-        except KeyError as e:
-            self.log.error(f"Simulated data not found for species '{e}'.")
+        if self.simout is None:
+            self.log.error("Simulated data not found in self.simout. Run a simulation first.")
             return None
+        
+        # simout can be a list or a np.ndarray depending on if initial concentrations were arrays or scalars
+        if isinstance(self.simout["y"], list):
+            total_y = [None]*len(self.simout["y"])
+            simout_is_list = True
+        elif isinstance(self.simout["y"], np.ndarray):
+            total_y = np.zeros_like(self.simout["y"])
+            simout_is_list = False
+        else:
+            self.log.error("Unrecognized simout data type. Expected list or np.ndarray.")
+            return None
+
+        for name in species_names:
+            if name not in self.species:
+                self.log.error(f"Species '{name}' not found in the system.")
+                return None
+            if self.species[name].simout is None:
+                self.log.error(f"Simulated data not found for species '{name}'.")
+                return None
+            if simout_is_list:
+                for i,simout in enumerate(self.species[name].simout["y"]):
+                    if total_y[i] is None:
+                        total_y[i] = simout
+                    else:
+                        total_y[i] += simout
+            else:
+                total_y += self.species[name].simout["y"]
         return total_y
 
     def mat2sp_simout(self,matrix,key_name="y"):

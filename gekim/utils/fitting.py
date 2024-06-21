@@ -15,6 +15,7 @@ def general_fit(model_func: Callable, x: np.ndarray, y: np.ndarray,
                 params: Union[dict, Parameters], xlim: tuple = None, 
                 weights_kde=False, weights: np.ndarray = None,
                 verbosity=2, **kwargs) -> ModelResult:
+    #TODO: support for multiple independent variables
     """
     General fitting function using lmfit.
 
@@ -49,8 +50,7 @@ def general_fit(model_func: Callable, x: np.ndarray, y: np.ndarray,
     -----
     The x-data used in the fit is stored in the ModelResult object as result.userdata['x'] for consistency.
     It also exists as result.userkws[indep_var_name].
-    """
-        
+    """ 
     if xlim:
         indices = (x >= xlim[0]) & (x <= xlim[1])
         x = x[indices]
@@ -80,7 +80,7 @@ def general_fit(model_func: Callable, x: np.ndarray, y: np.ndarray,
     sig = signature(model_func)
     indep_var_name = list(sig.parameters.keys())[0]
 
-    model = Model(model_func)
+    model = Model(model_func,independent_vars=[indep_var_name], param_names=list(lm_params.keys()))
     model_result = model.fit(y, lm_params, **{indep_var_name: x}, weights=weights, **kwargs)
 
     # Future proof storing x data in the ModelResult object

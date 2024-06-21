@@ -265,7 +265,7 @@ class ODESolver(BaseSimulator):
         J_log[0,0] = symbols("_")
 
         J_log_str = "Jacobian (including row and column labels):\n"
-        J_log_str += pretty((J_log),use_unicode=True)
+        J_log_str += pretty((J_log),use_unicode=False)
         J_log_str += "\n"
         self.system.log.info(J_log_str)
         if force_print:

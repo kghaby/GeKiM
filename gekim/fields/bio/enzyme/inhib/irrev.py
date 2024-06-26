@@ -724,7 +724,11 @@ def fit_dose_response_from_odes(concI0_arr: np.ndarray, response_obs: np.ndarray
 
     lm_params = merge_params(default_params, nondefault_params)
 
-    return general_fit(dose_response_from_odes, concI0_arr, response_obs, lm_params, xlim=xlim, weights_kde=weights_kde, weights=weights, verbosity=verbosity, scheme=scheme, **kwargs)
+    model_kwargs = {
+        "scheme": scheme
+    }
+
+    return general_fit(dose_response_from_odes, concI0_arr, response_obs, lm_params, xlim=xlim, weights_kde=weights_kde, weights=weights, verbosity=verbosity, model_kwargs=model_kwargs, **kwargs)
     
 def dose_response_from_odes_4S(concI0_arr: np.ndarray, t: float, kon: float, koff: float, kinact: float,  Parm: float, scheme: dict) -> np.ndarray:
     '''
@@ -816,7 +820,11 @@ def fit_dose_response_from_odes_4S(concI0_arr: np.ndarray, response_obs: np.ndar
 
     lm_params = merge_params(default_params, nondefault_params)
 
-    return general_fit(dose_response_from_odes_4S, concI0_arr, response_obs, lm_params, xlim=xlim, weights_kde=weights_kde, weights=weights, verbosity=verbosity, scheme=scheme, **kwargs)
+    model_kwargs = {
+        "scheme": scheme
+    }
+
+    return general_fit(dose_response_from_odes_4S, concI0_arr, response_obs, lm_params, xlim=xlim, weights_kde=weights_kde, weights=weights, verbosity=verbosity, model_kwargs=model_kwargs, **kwargs)
 
 class Params:
     """

@@ -14,8 +14,7 @@ from .helpers import arr2float
 def general_fit(model_func: Callable, x: np.ndarray, y: np.ndarray, 
                 params: Union[dict, Parameters], xlim: tuple = None, 
                 weights_kde=False, weights: np.ndarray = None,
-                verbosity=2, **kwargs) -> ModelResult:
-    #TODO: support for multiple independent variables
+                verbosity=2, independent_vars: list[str] = None, model_kwargs: dict = None, **kwargs) -> ModelResult:
     """
     General fitting function using lmfit.
 
@@ -38,6 +37,12 @@ def general_fit(model_func: Callable, x: np.ndarray, y: np.ndarray,
         weights parameter for fitting. This argument is overridden if weights_kde=True. Default is None.
     verbosity : int, optional
         0: print nothing. 1: print upon bad fit. 2: print always. Default is 2.
+    independent_vars : list of str, optional
+        List of independent variable names to pass to the lmfit Model. Default is None, and will use 
+        the first parameter name of the model function.
+    model_kwargs : dict, optional
+        Keyword arguments used in the model function that are not parameters. Default is None. 
+        Will be passed to the lmfit Model initialization.
     kwargs : dict, optional
         Additional keyword arguments to pass to the lmfit Model.fit function.
 
@@ -49,7 +54,7 @@ def general_fit(model_func: Callable, x: np.ndarray, y: np.ndarray,
     Notes
     -----
     The x-data used in the fit is stored in the ModelResult object as result.userdata['x'] for consistency.
-    It also exists as result.userkws[indep_var_name].
+    It also exists as result.userkws[first_indep_var_name].
     """ 
     if xlim:
         indices = (x >= xlim[0]) & (x <= xlim[1])
@@ -76,19 +81,25 @@ def general_fit(model_func: Callable, x: np.ndarray, y: np.ndarray,
     else:
         raise ValueError("params must be a lmfit.Parameters or dict instance.")
 
+    # Set empty model_kwargs to an empty dict bc default values should not be mutable
+    if model_kwargs is None:
+        model_kwargs = {} 
+
     # Dynamically handle the independent variable name so that model funcs aren't required to use "x"
     sig = signature(model_func)
-    indep_var_name = list(sig.parameters.keys())[0]
-
-    model = Model(model_func,independent_vars=[indep_var_name], param_names=list(lm_params.keys()))
-    model_result = model.fit(y, lm_params, **{indep_var_name: x}, weights=weights, **kwargs)
+    first_indep_var_name = list(sig.parameters.keys())[0]
+    if independent_vars is None:
+        independent_vars = [first_indep_var_name]
+    model = Model(model_func,independent_vars=independent_vars, param_names=list(lm_params.keys()),**model_kwargs)
+    model_result = model.fit(y, lm_params, **{first_indep_var_name: x}, weights=weights, **kwargs)
 
     # Future proof storing x data in the ModelResult object
     if hasattr(model_result, "userdata"):
         print("Warning: model_result.userdata already exists.")
         if "x" in model_result.userdata:
             print("Warning: model_result.userdata['x'] already exists. This is unexpected.")
-            print(f"\tNot overwriting since x-data is also stored in model_result.userkws['{indep_var_name}'].")
+            print(f"\tNot overwriting since x-data is also stored in model_result.userkws['{first_indep_var_name}']"
+                    f"(or under any other independent variable name).")
         else:
             model_result.userdata["x"] = x
     else:

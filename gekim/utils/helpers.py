@@ -59,6 +59,9 @@ def round_sig(num: float, sig_figs: int = 3, autoformat=True):
     """
     if num == 0:
         return 0.0
+    
+    if num == np.inf:
+        return np.inf
 
     order_of_magnitude = floor(log10(abs(num)))
     shift = sig_figs - 1 - order_of_magnitude
@@ -74,6 +77,28 @@ def round_sig(num: float, sig_figs: int = 3, autoformat=True):
     else:
         return result
 
+def zero_array(data: np.ndarray) -> np.ndarray:
+    """Subtract the minimum value from the array"""
+    return data - np.min(data)
+
+def normalize_array(data: np.ndarray, norm_idx: int = None) -> np.ndarray:
+    """Normalize the array to the maximum value (default) or to a specific index value"""
+    if norm_idx is not None:
+        return data / data[norm_idx]
+    return data / np.max(data)
+
+def process_array(data: np.ndarray, zero=True, norm_idx: int = None) -> np.ndarray:
+    """
+    Process the array by normalizing and optionally zeroing it.
+    It will normalize to the max value or, if specified, a value at a specific index.
+    """
+    if data is None:
+        return
+    if zero:
+        data = zero_array(data)
+    data = normalize_array(data, norm_idx)
+    return data
+    
 def update_dict(defaults: dict, updates: dict = None, subset=False) -> dict:
     """
     Recursively updates the default dictionary with values from the update dictionary.
@@ -209,3 +234,4 @@ class CaptureOutput(list):
     def __exit__(self, *args):
         self.extend(self._stringio.getvalue().splitlines())
         sys.stdout = self._stdout
+

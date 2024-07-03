@@ -322,6 +322,7 @@ class ODESolver(BaseSimulator):
             # Linear scaling of the inverse min eigenvalue underestimates when y0E ~= y0I
             # Linearize system then use normal mode frequency of linear system (1/(sqrt(smallest eigenvalue))?
             # needs to be an n-dimensional function, where n is the degree of (non)linearity
+        #TODO: progress bar (in solve_ivp?)
 
         y0_mat = self._make_y0_mat()
         y0_mat_len = len(y0_mat)

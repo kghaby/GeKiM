@@ -897,6 +897,9 @@ class Params:
 
         Can be obtained from the upper limit of a fitted dose response curve. 
         """
+        if Prob_cov >= 1:
+            print("Cannot calculate kinact_app from a timepoint where the system is fully inactivated.")
+            return np.inf
         return -np.log(1-Prob_cov)/t
     
     @staticmethod
@@ -932,6 +935,14 @@ class Params:
         log_term = np.log((np.e**(-kinact_app*t)+1)/2)
         Khalf = -1*((KI_app * log_term) / (kinact_app  * t + log_term))
         return Khalf
+
+    def KI_from_Khalf_kinact(Khalf,kinact_app,t):
+        """
+        Calculate the KI from the Khalf (EC50) and apparent kinact and a single timepoint.
+        """
+        log_term = np.log((np.e**(-kinact_app*t)+1)/2)
+        KI = Khalf*(-1 * kinact_app * t / (log_term) - 1)
+        return KI
 
 class Experiments:
     """

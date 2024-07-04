@@ -409,15 +409,19 @@ class NState:
         
         # simout can be a list or a np.ndarray depending on if initial concentrations were arrays or scalars
         if isinstance(self.simout["y"], list):
-            total_y = [None]*len(self.simout["y"])
+            len_simouts = len(self.simout["y"])
+            first_simout = self.simout["y"][0]
+            len_species, len_simpoints = first_simout.shape
+            first_species_first_simout = first_simout[0]
+            total_y = [np.zeros_like(first_species_first_simout) for _ in range(len_simouts)]
             simout_is_list = True
         elif isinstance(self.simout["y"], np.ndarray):
-            total_y = np.zeros_like(self.simout["y"][0]) 
+            first_species_simout = self.simout["y"][0]
+            total_y = np.zeros_like(first_species_simout) 
             simout_is_list = False
         else:
             self.log.error("Unrecognized simout data type. Expected list or np.ndarray.")
             return None
-
         for name in species_names:
             if name not in self.species:
                 self.log.error(f"Species '{name}' not found in the system.")
@@ -426,11 +430,9 @@ class NState:
                 self.log.error(f"Simulated data not found for species '{name}'.")
                 return None
             if simout_is_list:
-                for i,simout in enumerate(self.species[name].simout["y"]):
-                    if total_y[i] is None:
-                        total_y[i] = simout
-                    else:
-                        total_y[i] += simout
+                simouts = self.species[name].simout["y"]
+                for i,simout in enumerate(simouts):
+                    total_y[i] += simout
             else:
                 total_y += self.species[name].simout["y"]
         return total_y

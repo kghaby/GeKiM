@@ -52,8 +52,8 @@ def dose_response_fit(dose: np.ndarray, response: np.ndarray, nondefault_params:
         ```python
         default_params.add('Khalf', value=100, vary=True, min=0, max=np.inf)
         default_params.add('n', value=1, vary=True, min=0, max=np.inf)
-        default_params.add('uplim', value=1, vary=True)
-        default_params.add('nonspecific_m', value=0, vary=False)
+        default_params.add('uplim', value=1, vary=True, min=0, max=np.inf)
+        default_params.add('nonspecific_m', value=0, vary=False, min=0, max=np.inf)
         ```
         Example dict of nondefaults:
         ```python
@@ -81,8 +81,8 @@ def dose_response_fit(dose: np.ndarray, response: np.ndarray, nondefault_params:
     default_params = lmfitParameters()
     default_params.add('Khalf', value=100, vary=True, min=0, max=np.inf)
     default_params.add('n', value=1, vary=True, min=0, max=np.inf)
-    default_params.add('uplim', value=1, vary=True)
-    default_params.add('nonspecific_m', value=0, vary=False)
+    default_params.add('uplim', value=1, vary=True, min=0, max=np.inf)
+    default_params.add('nonspecific_m', value=0, vary=False, min=0, max=np.inf)
 
     lm_params = merge_params(default_params, nondefault_params)
     return general_fit(dose_response, dose, response, lm_params, xlim=xlim, weights_kde=weights_kde, weights=weights, verbosity=verbosity, **kwargs)

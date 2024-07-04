@@ -660,8 +660,8 @@ def dose_response_from_odes(concI0_arr: np.ndarray, t: float, kon: float, koff: 
     koff_app = koff
     k_changes = {
         'kon': kon,
-        'koff_app': koff_app,
-        'kinact_app': kinact_app
+        'koff': koff_app,
+        'kinact': kinact_app
     }
     
     system, response = Experiments.dose_response(concI0_arr, t, scheme, k_changes=k_changes)
@@ -755,8 +755,8 @@ def dose_response_from_odes_4S(concI0_arr: np.ndarray, t: float, kon: float, kof
     koff_app = koff*(1-Parm)
     k_changes = {
         'kon': kon,
-        'koff_app': koff_app,
-        'kinact_app': kinact_app
+        'koff': koff_app,
+        'kinact': kinact_app
     }
     
     system, response = Experiments.dose_response(concI0_arr, t, scheme, k_changes=k_changes)
@@ -880,7 +880,7 @@ class Params:
         return (koff + kinact) / kon
 
     @staticmethod
-    def kinact_app(t: float, Prob_cov: float):
+    def kinact_app_from_uplim(t: float, Prob_cov: float):
         """
         The apparent maximal rate constant of inactivation, calculated from a single timepoint.
 
@@ -1123,8 +1123,8 @@ class Experiments:
         ```python
         k_changes = {
             'kon': kon,
-            'koff_app': koff_app,
-            'kinact_app': kinact_app
+            'koff': koff, # koff_app
+            'kinact': kinact # kinact_app
         }
         ```
 
@@ -1153,6 +1153,7 @@ class Experiments:
         system.simulator.simulate(**sim_kwargs)
 
         response = system.sum_species_simout(whitelist=response_sp)
-        response = np.array([simout[-1] for simout in response])/system.species[E_spname].y0 # normalize to total E
+        response = np.array([simout[-1] for simout in response])
+        response /= system.species[E_spname].y0 # normalize to total E
 
         return system, response

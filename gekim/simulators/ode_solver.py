@@ -333,10 +333,13 @@ class ODESolver(BaseSimulator):
         input_t_span = t_span
         solns = [None]*y0_mat_len
         for i,y0 in enumerate(y0_mat):
+            if np.any(y0 < 0):
+                self.system.log.warning(f"WARNING: Negative y0 in y0_mat[{i}] = {y0}")
+
             if input_atol == 0:
-                min_y0 = np.min(y0[y0 != 0])
-                atol = min_y0*1e-6 # smallest nonzero value of the Jacobian
-                self.system.log.info(f"\tSetting atol to {atol:.2e}, 1e-6 * <the smallest nonzero value of y0 ({min_y0})> .")
+                min_y0 = np.abs(np.min(y0[y0 != 0]))
+                atol = min_y0*1e-6 
+                self.system.log.info(f"\tSetting atol to {atol:.2e}, 1e-6 * <the absolute value of the smallest nonzero value of y0 ({min_y0})> .")
                 
             if input_t_span is None:
                 if input_t_eval is None:

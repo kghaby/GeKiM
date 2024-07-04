@@ -412,7 +412,7 @@ class NState:
             total_y = [None]*len(self.simout["y"])
             simout_is_list = True
         elif isinstance(self.simout["y"], np.ndarray):
-            total_y = np.zeros_like(self.simout["y"])
+            total_y = np.zeros_like(self.simout["y"][0]) 
             simout_is_list = False
         else:
             self.log.error("Unrecognized simout data type. Expected list or np.ndarray.")

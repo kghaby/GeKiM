@@ -635,7 +635,8 @@ def fit_to_occ_final_wrt_concI0_4S(concI0, occ_final, nondefault_params: Union[d
 
     return general_fit(occ_final_wrt_concI0_4S, concI0, occ_final, lm_params, xlim=xlim, weights_kde=weights_kde, weights=weights, verbosity=verbosity, **kwargs)
 
-def dose_response_from_odes(concI0_arr: np.ndarray, t: float, kon: float, koff: float, kinact: float, scheme: dict) -> np.ndarray:
+def dose_response_from_odes(concI0_arr: np.ndarray, t: float, kon: float, koff: float, kinact: float, 
+        scheme: dict, experiment_kwargs: dict = None) -> np.ndarray:
     '''
     Calculate the occupancy of final occupancy (Occ_cov) with respect to dose.
 
@@ -647,9 +648,17 @@ def dose_response_from_odes(concI0_arr: np.ndarray, t: float, kon: float, koff: 
         may be used in place of the remaining [I] at the endpoint.
     t : float
         Endpoint for the dosing.
+    kon : float
+        
+    koff : float
+
     kinact : float
         Maximum potential rate of covalent bond formation.
+        
+    scheme : dict
 
+    experiment_kwargs : dict
+        kwargs for Experiments.dose_response
 
     Returns
     -------
@@ -663,12 +672,17 @@ def dose_response_from_odes(concI0_arr: np.ndarray, t: float, kon: float, koff: 
         'koff': koff_app,
         'kinact': kinact_app
     }
-    
-    system, response = Experiments.dose_response(concI0_arr, t, scheme, k_changes=k_changes)
+
+    if experiment_kwargs is None:
+        experiment_kwargs = {}
+
+    system, response = Experiments.dose_response(concI0_arr, t, scheme, k_changes=k_changes, **experiment_kwargs)
 
     return response
 
-def fit_dose_response_from_odes(concI0_arr: np.ndarray, response_obs: np.ndarray, scheme: dict, nondefault_params: Union[dict,lmfitParameters] = None, xlim: tuple = None, weights_kde=False, weights: np.ndarray = None, verbosity=2, **kwargs) -> ModelResult:
+def fit_dose_response_from_odes(concI0_arr: np.ndarray, response_obs: np.ndarray, scheme: dict,  experiment_kwargs: dict = None, 
+        nondefault_params: Union[dict,lmfitParameters] = None, xlim: tuple = None, weights_kde=False, weights: np.ndarray = None, 
+        verbosity=2, **kwargs) -> ModelResult:
     '''
     Fit kobs to the first order occupancy over time.
 
@@ -678,8 +692,12 @@ def fit_dose_response_from_odes(concI0_arr: np.ndarray, response_obs: np.ndarray
         Array of initial concentrations of the inhibitor. Note that the 
         inhibitor is assumed to be constant so that the initial concentration 
         may be used in place of the remaining [I] at the endpoint.
-    occ_final : np.ndarray
+    response_obs : np.ndarray
         Array of observed occupancy, i.e. concentration.
+    scheme : dict
+        The scheme of the system.
+    experiment_kwargs : dict
+        kwargs for Experiments.dose_response
     nondefault_params : dict or Parameters, optional
         A structured dictionary of parameters with 'value','vary', and 'bound' keys or a lmfit.Parameters object.
         Defaults:
@@ -725,12 +743,14 @@ def fit_dose_response_from_odes(concI0_arr: np.ndarray, response_obs: np.ndarray
     lm_params = merge_params(default_params, nondefault_params)
 
     model_kwargs = {
-        "scheme": scheme
+        "scheme": scheme,
+        "experiment_kwargs": experiment_kwargs
     }
 
     return general_fit(dose_response_from_odes, concI0_arr, response_obs, lm_params, xlim=xlim, weights_kde=weights_kde, weights=weights, verbosity=verbosity, model_kwargs=model_kwargs, **kwargs)
     
-def dose_response_from_odes_4S(concI0_arr: np.ndarray, t: float, kon: float, koff: float, kinact: float,  Parm: float, scheme: dict) -> np.ndarray:
+def dose_response_from_odes_4S(concI0_arr: np.ndarray, t: float, kon: float, koff: float, kinact: float,  Parm: float, 
+        scheme: dict, experiment_kwargs: dict = None) -> np.ndarray:
     '''
     Calculate the occupancy of final occupancy (Occ_cov) with respect to dose.
 
@@ -742,9 +762,19 @@ def dose_response_from_odes_4S(concI0_arr: np.ndarray, t: float, kon: float, kof
         may be used in place of the remaining [I] at the endpoint.
     t : float
         Endpoint for the dosing.
+    kon : float
+        
+    koff : float
+
     kinact : float
         Maximum potential rate of covalent bond formation.
 
+    Parm : float
+        
+    scheme : dict
+
+    experiment_kwargs : dict
+        kwargs for Experiments.dose_response
 
     Returns
     -------
@@ -759,11 +789,16 @@ def dose_response_from_odes_4S(concI0_arr: np.ndarray, t: float, kon: float, kof
         'kinact': kinact_app
     }
     
-    system, response = Experiments.dose_response(concI0_arr, t, scheme, k_changes=k_changes)
+    if experiment_kwargs is None:
+        experiment_kwargs = {}
+
+    system, response = Experiments.dose_response(concI0_arr, t, scheme, k_changes=k_changes, **experiment_kwargs)
 
     return response
 
-def fit_dose_response_from_odes_4S(concI0_arr: np.ndarray, response_obs: np.ndarray, scheme: dict, nondefault_params: Union[dict,lmfitParameters] = None, xlim: tuple = None, weights_kde=False, weights: np.ndarray = None, verbosity=2, **kwargs) -> ModelResult:
+def fit_dose_response_from_odes_4S(concI0_arr: np.ndarray, response_obs: np.ndarray, scheme: dict,  experiment_kwargs: dict = None, 
+        nondefault_params: Union[dict,lmfitParameters] = None, xlim: tuple = None, weights_kde=False, weights: np.ndarray = None, 
+        verbosity=2, **kwargs) -> ModelResult:
     '''
     Fit kobs to the first order occupancy over time.
 
@@ -773,8 +808,12 @@ def fit_dose_response_from_odes_4S(concI0_arr: np.ndarray, response_obs: np.ndar
         Array of initial concentrations of the inhibitor. Note that the 
         inhibitor is assumed to be constant so that the initial concentration 
         may be used in place of the remaining [I] at the endpoint.
-    occ_final : np.ndarray
+    response_obs : np.ndarray
         Array of observed occupancy, i.e. concentration.
+    scheme : dict
+        The scheme of the system.
+    experiment_kwargs : dict
+        kwargs for Experiments.dose_response
     nondefault_params : dict or Parameters, optional
         A structured dictionary of parameters with 'value','vary', and 'bound' keys or a lmfit.Parameters object.
         Defaults:
@@ -821,11 +860,114 @@ def fit_dose_response_from_odes_4S(concI0_arr: np.ndarray, response_obs: np.ndar
     lm_params = merge_params(default_params, nondefault_params)
 
     model_kwargs = {
-        "scheme": scheme
+        "scheme": scheme,
+        "experiment_kwargs": experiment_kwargs
     }
 
     return general_fit(dose_response_from_odes_4S, concI0_arr, response_obs, lm_params, xlim=xlim, weights_kde=weights_kde, weights=weights, verbosity=verbosity, model_kwargs=model_kwargs, **kwargs)
 
+def time_response_from_odes(t_eval: np.ndarray, kon: float, koff: float, kinact: float, scheme: dict, experiment_kwargs: dict = None) -> np.ndarray:
+    '''
+    Calculate the occupancy of final occupancy (Occ_cov) with respect to dose.
+
+    Parameters
+    ----------
+    t_eval : np.ndarray
+
+    experiment_kwargs : dict
+        kwargs for Experiments.time_response_nofit
+    
+    Returns
+    -------
+    np.ndarray
+        Occupancy of final occupancy (Occ_cov).
+
+    '''
+    kinact_app = kinact
+    koff_app = koff
+    k_changes = {
+        'kon': kon,
+        'koff': koff_app,
+        'kinact': kinact_app
+    }
+    
+    if experiment_kwargs is None:
+        experiment_kwargs = {}
+
+    experiment_kwargs["sim_kwargs"] = {
+        't_eval': t_eval
+    }
+
+    system, response = Experiments.time_response_nofit(scheme, k_changes=k_changes, **experiment_kwargs)
+
+    return response
+
+def fit_time_response_from_odes(t_eval: np.ndarray, response_obs: np.ndarray, scheme: dict, experiment_kwargs: dict = None, 
+        nondefault_params: Union[dict,lmfitParameters] = None, xlim: tuple = None, weights_kde=False, weights: np.ndarray = None, 
+        verbosity=2, **kwargs) -> ModelResult:
+    '''
+    Fit kobs to the first order occupancy over time.
+
+    Parameters
+    ----------
+    t_eval : np.ndarray
+
+    response_obs : np.ndarray
+        Array of observed occupancy, i.e. concentration.
+    scheme : dict
+        The scheme of the system.
+    experiment_kwargs : dict
+        kwargs for Experiments.time_response_nofit
+    nondefault_params : dict or Parameters, optional
+        A structured dictionary of parameters with 'value','vary', and 'bound' keys or a lmfit.Parameters object.
+        Defaults:
+        ```python
+        default_params.add('kon', value=.0001, vary=True, min=0, max=np.inf)
+        default_params.add('koff', value=.01, vary=True, min=0, max=np.inf) # koff_app
+        default_params.add('kinact', value=0.001, vary=True, min=0, max=np.inf) # kinact_app
+
+        ```
+        Example dict of nondefaults:
+        ```python
+        nondefault_params = {
+            "Etot": {"vary": False, "value": 0.5},  
+            "uplim": {"vary": False},    
+        }
+        ```
+    xlim : tuple, optional
+        Limits for the time points considered in the fit (min_t, max_t).
+    weights_kde : bool, optional
+        If True, calculate the density of the x-values and use the normalized reciprocol as weights. Similar to 1/sigma for scipy.curve_fit.
+        Helps distribute weight over unevenly-spaced points. Default is False.
+    weights : np.ndarray, optional
+        weights parameter for fitting. This argument is overridden if weights_kde=True. Default is None.
+    verbosity : int, optional
+        0: print nothing. 1: print upon bad fit. 2: print always. Default is 2.
+    kwargs : dict, optional
+        Additional keyword arguments to pass to the lmfit Model.fit function.
+
+    Returns
+    -------
+    lmfit.ModelResult
+        The result of the fitting operation from lmfit.
+
+    '''
+
+    default_params = lmfitParameters()
+    default_params.add('kon', value=.0001, vary=True, min=0, max=np.inf)
+    default_params.add('koff', value=.01, vary=True, min=0, max=np.inf)
+    default_params.add('kinact', value=0.001, vary=True, min=0, max=np.inf)
+
+    lm_params = merge_params(default_params, nondefault_params)
+
+    model_kwargs = {
+        "scheme": scheme,
+        "experiment_kwargs": experiment_kwargs
+    }
+
+    return general_fit(time_response_from_odes, t_eval, response_obs, lm_params, xlim=xlim, weights_kde=weights_kde, weights=weights, verbosity=verbosity, model_kwargs=model_kwargs, **kwargs)
+
+    
 class Params:
     """
     Common place for parameters found in covalent inhibition literature.
@@ -948,22 +1090,67 @@ class Experiments:
     """
     Common place for experimental setups in covalent inhibition literature.
     """
+    #TODO: make base class for experiments. have the docstrings be inherited. 
+    #TODO: make class for experiment output
     
     @staticmethod
-    def timecourse(scheme: dict, dose_spname: str = "I", CO_spname: str = "EI", E_spname: str = "E", 
-                    system_kwargs: dict = None, sim_kwargs: dict = None, fit_occ_kwargs: dict = None) -> tuple[NState, ModelResult]:
+    def time_response_nofit(scheme: dict, t_eval=None, dose_spname: str = "I", CO_spname: str = "EI", E_spname: str = "E", response_sp: list = None, 
+                    k_changes: dict = None, system_kwargs: dict = None, sim_kwargs: dict = None) -> tuple[NState,np.ndarray]:
         """
         A macro for doing timecourses.
+
+        Example k_changes dict:
+        ```python
+        k_changes = {
+            'kon': kon,
+            'koff': koff, # koff_app
+            'kinact': kinact # kinact_app
+        }
+        ```
         """
-        
+        # Default to CO_spname for the response species
+        if response_sp is None:
+            response_sp = [CO_spname]
+
         default_system_kwargs = {
             "quiet": True,
         }
         system_kwargs = update_dict(default_system_kwargs, system_kwargs)
 
         default_sim_kwargs = {
+            "t_eval": t_eval
         }
         sim_kwargs = update_dict(default_sim_kwargs, sim_kwargs)
+
+        system = NState(scheme,**system_kwargs)
+        if k_changes is not None:
+            for k_name, k_val in k_changes.items():
+                if k_name not in system.transitions:
+                    raise ValueError(f"{k_name} not found in scheme transitions.")
+                system.transitions[k_name].k = k_val
+        system.simulator = ODESolver(system)
+        system.simulator.simulate(**sim_kwargs)
+        response = system.sum_species_simout(whitelist=response_sp) 
+        response /= system.species[E_spname].y0 # normalize to total E
+
+        return system, response
+
+    @staticmethod
+    def time_response(scheme: dict, t_eval=None, dose_spname: str = "I", CO_spname: str = "EI", E_spname: str = "E", 
+                    k_changes: dict = None, system_kwargs: dict = None, sim_kwargs: dict = None, 
+                    fit_occ_kwargs: dict = None) -> tuple[NState, ModelResult]:
+        """
+        A macro for doing timecourses.
+
+        Example k_changes dict:
+        ```python
+        k_changes = {
+            'kon': kon,
+            'koff': koff, # koff_app
+            'kinact': kinact # kinact_app
+        }
+        ```
+        """
 
         default_fit_occ_kwargs = {
             "nondefault_params" : {
@@ -974,55 +1161,29 @@ class Experiments:
         }
         fit_occ_kwargs = update_dict(default_fit_occ_kwargs, fit_occ_kwargs)
 
-        system = NState(scheme,**system_kwargs)
-        system.simulator = ODESolver(system)
-        system.simulator.simulate(**sim_kwargs)
+        system, response = Experiments.time_response_nofit(scheme,t_eval=t_eval,dose_spname=dose_spname,CO_spname=CO_spname,E_spname=E_spname, k_changes=k_changes, system_kwargs=system_kwargs,sim_kwargs=sim_kwargs)
     
         x_data = system.simout["t"]
-        y_data = system.species[CO_spname].simout["y"]
+        y_data = response
         fit_output = kobs_uplim_fit_to_occ_final_wrt_t(x_data,y_data,**fit_occ_kwargs)
         fit_output.best_values["kobs"]
 
         return system, fit_output
     
-    @staticmethod
-    def timecourse_nofit(scheme: dict, dose_spname: str = "I", CO_spname: str = "EI", E_spname: str = "E", 
-                    system_kwargs: dict = None, sim_kwargs: dict = None) -> NState:
-        """
-        A macro for doing timecourses.
-        """
-        
-        default_system_kwargs = {
-            "quiet": True,
-        }
-        system_kwargs = update_dict(default_system_kwargs, system_kwargs)
 
-        default_sim_kwargs = {
-        }
-        sim_kwargs = update_dict(default_sim_kwargs, sim_kwargs)
-
-        default_fit_occ_kwargs = {
-            "nondefault_params" : {
-                    "Etot": {"vary": False, "value": scheme["species"][E_spname]["y0"]},
-                    "uplim": {"vary": False, "value": 1},
-                },
-            "verbosity": 2,
-        }
-        fit_occ_kwargs = update_dict(default_fit_occ_kwargs, fit_occ_kwargs)
-
-        system = NState(scheme,**system_kwargs)
-        system.simulator = ODESolver(system)
-        system.simulator.simulate(**sim_kwargs)
-
-        return system
     
     @staticmethod
     def _single_dose_for_rate(args):
-        indices, doses, scheme, dose_spname, CO_spname, system_kwargs, sim_kwargs, fit_occ_kwargs = args
+        indices, doses, scheme, dose_spname, CO_spname, k_changes, system_kwargs, sim_kwargs, fit_occ_kwargs = args
 
         with CaptureOutput() as output:
             system = NState(scheme,**system_kwargs)
             system.species[dose_spname].y0 = doses
+            if k_changes is not None:
+                for k_name, k_val in k_changes.items():
+                    if k_name not in system.transitions:
+                        raise ValueError(f"{k_name} not found in scheme transitions.")
+                    system.transitions[k_name].k = k_val
             system.simulator = ODESolver(system)
             system.simulator.simulate(**sim_kwargs)
 
@@ -1044,7 +1205,8 @@ class Experiments:
 
     @staticmethod
     def dose_rate(scheme: dict, dose_arr: np.ndarray, dose_spname: str = "I", CO_spname: str = "EI", E_spname: str = "E", num_cores=1, 
-                    system_kwargs: dict = None, sim_kwargs: dict = None, fit_occ_kwargs: dict = None, fit_kobs_kwargs: dict = None) -> ModelResult:
+                k_changes: dict = None, system_kwargs: dict = None, sim_kwargs: dict = None, fit_occ_kwargs: dict = None, 
+                fit_kobs_kwargs: dict = None) -> ModelResult:
         """
         A macro for doing timecourses with variable [I] and fitting for apparent KI and kinact.
         Uses multiprocessing.
@@ -1054,6 +1216,15 @@ class Experiments:
         Different processes may have different atols if atol0=0 and dose_arr ranges 
             from being smaller to larger than `scheme["species"][E_spname]["y0"]`
         This is because if atol==0 is chosen in `simulate()` to be `1e-6*min(y0[y0!=0])`
+
+        Example k_changes dict:
+        ```python
+        k_changes = {
+            'kon': kon,
+            'koff': koff, # koff_app
+            'kinact': kinact # kinact_app
+        }
+        ```
         """
         num_cores = min(num_cores, cpu_count())
 
@@ -1093,7 +1264,7 @@ class Experiments:
         chunked_indices = list(chunks(range(len(dose_arr)), len(dose_arr) // num_cores + 1))
         chunked_doses = list(chunks(dose_arr, len(dose_arr) // num_cores + 1))
 
-        args_list = [(indices, doses, scheme.copy(), dose_spname, CO_spname, system_kwargs, sim_kwargs, fit_occ_kwargs)
+        args_list = [(indices, doses, scheme.copy(), dose_spname, CO_spname, k_changes, system_kwargs, sim_kwargs, fit_occ_kwargs)
                      for indices, doses in zip(chunked_indices, chunked_doses)]
 
 
@@ -1145,10 +1316,11 @@ class Experiments:
 
         system = NState(scheme,**system_kwargs)
         system.species[dose_spname].y0 = dose_arr
-        for k_name, k_val in k_changes.items():
-            if k_name not in system.transitions:
-                raise ValueError(f"{k_name} not found in scheme transitions.")
-            system.transitions[k_name].k = k_val
+        if k_changes is not None:
+            for k_name, k_val in k_changes.items():
+                if k_name not in system.transitions:
+                    raise ValueError(f"{k_name} not found in scheme transitions.")
+                system.transitions[k_name].k = k_val
         system.simulator = ODESolver(system)
         system.simulator.simulate(**sim_kwargs)
 

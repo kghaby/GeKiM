@@ -429,7 +429,6 @@ class NState:
             if simout_is_list:
                 simouts = self.species[name].simout["y"]
                 for i,simout in enumerate(simouts):
-                    print(name,i,simout.shape)
                     total_y[i] += simout
 
             else:

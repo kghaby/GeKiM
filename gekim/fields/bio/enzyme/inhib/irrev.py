@@ -1354,7 +1354,6 @@ class Experiments:
         system.simulator = ODESolver(system)
         system.simulator.simulate(**sim_kwargs)
 
-        print(system.simout["t"][0].shape,system.species["EI"].simout["y"][0].shape,system.species["E_nsI"].simout["y"][0].shape)
         response = system.sum_species_simout(whitelist=response_sp)
         response = np.array([simout[-1] for simout in response])
         response /= system.species[E_spname].y0 # normalize to total E

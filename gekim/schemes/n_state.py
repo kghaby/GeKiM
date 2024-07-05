@@ -406,7 +406,7 @@ class NState:
         if self.simout is None:
             self.log.error("Simulated data not found in self.simout. Run a simulation first.")
             return None
-        
+
         # simout can be a list or a np.ndarray depending on if initial concentrations were arrays or scalars
         if isinstance(self.simout["y"], list):
             len_simouts = len(self.simout["y"])

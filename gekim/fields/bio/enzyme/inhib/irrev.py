@@ -1094,7 +1094,7 @@ class Experiments:
     #TODO: make class for experiment output
     
     @staticmethod
-    def time_response_nofit(scheme: dict, t_eval=None, dose_spname: str = "I", CO_spname: str = "EI", E_spname: str = "E", response_sp: list = None, 
+    def time_response_nofit(scheme: Union[dict,NState], t_eval=None, dose_spname: str = "I", CO_spname: str = "EI", E_spname: str = "E", response_sp: list = None, 
                     k_changes: dict = None, system_kwargs: dict = None, sim_kwargs: dict = None) -> tuple[NState,np.ndarray]:
         """
         A macro for doing timecourses.
@@ -1122,17 +1122,22 @@ class Experiments:
         if response_sp is None:
             response_sp = [CO_spname]
 
-        default_system_kwargs = {
-            "quiet": True,
-        }
-        system_kwargs = update_dict(default_system_kwargs, system_kwargs)
+        if isinstance(scheme, dict):
+            default_system_kwargs = {
+                "quiet": True,
+            }
+            system_kwargs = update_dict(default_system_kwargs, system_kwargs)
+            system = NState(scheme,**system_kwargs)
+        elif isinstance(scheme, NState):
+            system = scheme
+        else:
+            raise ValueError("scheme must be a dict or NState object.")
 
         default_sim_kwargs = {
             "t_eval": t_eval
         }
         sim_kwargs = update_dict(default_sim_kwargs, sim_kwargs)
 
-        system = NState(scheme,**system_kwargs)
         if k_changes is not None:
             for k_name, k_val in k_changes.items():
                 if k_name not in system.transitions:
@@ -1146,7 +1151,7 @@ class Experiments:
         return system, response
 
     @staticmethod
-    def time_response(scheme: dict, t_eval=None, dose_spname: str = "I", CO_spname: str = "EI", E_spname: str = "E", 
+    def time_response(scheme: Union[dict,NState], t_eval=None, dose_spname: str = "I", CO_spname: str = "EI", E_spname: str = "E", 
                     k_changes: dict = None, system_kwargs: dict = None, sim_kwargs: dict = None, 
                     fit_occ_kwargs: dict = None) -> tuple[NState, ModelResult]:
         """
@@ -1172,9 +1177,16 @@ class Experiments:
         ```
         """
 
+        if isinstance(scheme, dict):
+            concE0 = scheme["species"][E_spname]["y0"]
+        elif isinstance(scheme, NState):
+            concE0 = scheme.species[E_spname].y0
+        else:
+            raise ValueError("scheme must be a dict or NState object.")
+
         default_fit_occ_kwargs = {
             "nondefault_params" : {
-                    "Etot": {"vary": False, "value": scheme["species"][E_spname]["y0"]},
+                    "Etot": {"vary": False, "value": concE0},
                     "uplim": {"vary": False, "value": 1},
                 },
             "verbosity": 2,
@@ -1191,7 +1203,6 @@ class Experiments:
         return system, fit_output
     
 
-    
     @staticmethod
     def _single_dose_for_rate(args):
         indices, doses, scheme, dose_spname, CO_spname, k_changes, system_kwargs, sim_kwargs, fit_occ_kwargs = args
@@ -1306,7 +1317,7 @@ class Experiments:
         return fit_output
 
     @staticmethod
-    def dose_response(dose_arr: np.ndarray, t_end: float, scheme: dict, dose_spname: str = "I", CO_spname: str = "EI", E_spname: str = "E", response_sp: list = None, k_changes: dict = None, system_kwargs: dict = None, sim_kwargs: dict = None) -> tuple[NState, np.ndarray]:
+    def dose_response(dose_arr: np.ndarray, t_end: float, scheme: Union[dict,NState], dose_spname: str = "I", CO_spname: str = "EI", E_spname: str = "E", response_sp: list = None, k_changes: dict = None, system_kwargs: dict = None, sim_kwargs: dict = None) -> tuple[NState, np.ndarray]:
         """
         A macro for doing timecourses with variable [I] and returning a fractional response curve.
 
@@ -1334,17 +1345,22 @@ class Experiments:
         if response_sp is None:
             response_sp = [CO_spname]
 
-        default_system_kwargs = {
-            "quiet": True,
-        }
-        system_kwargs = update_dict(default_system_kwargs, system_kwargs)
+        if isinstance(scheme, dict):
+            default_system_kwargs = {
+                "quiet": True,
+            }
+            system_kwargs = update_dict(default_system_kwargs, system_kwargs)
+            system = NState(scheme,**system_kwargs)
+        elif isinstance(scheme, NState):
+            system = scheme
+        else:
+            raise ValueError("scheme must be a dict or NState object.")
 
         default_sim_kwargs = {
             "t_span": (0, t_end),
         }
         sim_kwargs = update_dict(default_sim_kwargs, sim_kwargs)
 
-        system = NState(scheme,**system_kwargs)
         system.species[dose_spname].y0 = dose_arr
         if k_changes is not None:
             for k_name, k_val in k_changes.items():

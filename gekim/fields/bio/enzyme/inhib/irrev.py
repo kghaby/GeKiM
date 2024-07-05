@@ -1099,6 +1099,16 @@ class Experiments:
         """
         A macro for doing timecourses.
 
+        Returns
+        -------
+        NState
+            The system object.
+        np.ndarray
+            The response normalized to the total enzyme.
+
+        Notes
+        -----
+
         Example k_changes dict:
         ```python
         k_changes = {
@@ -1141,6 +1151,16 @@ class Experiments:
                     fit_occ_kwargs: dict = None) -> tuple[NState, ModelResult]:
         """
         A macro for doing timecourses.
+
+        Returns
+        -------
+        NState
+            The system object.
+        ModelResult
+            The fit output.
+
+        Notes
+        -----
 
         Example k_changes dict:
         ```python
@@ -1290,6 +1310,16 @@ class Experiments:
         """
         A macro for doing timecourses with variable [I] and returning a fractional response curve.
 
+        Returns
+        -------
+        NState
+            The system object.
+        np.ndarray
+            The response normalized to the total enzyme.
+
+        Notes
+        -----
+
         Example k_changes dict:
         ```python
         k_changes = {
@@ -1324,6 +1354,7 @@ class Experiments:
         system.simulator = ODESolver(system)
         system.simulator.simulate(**sim_kwargs)
 
+        print(system.simout["t"][0].shape,system.species["EI"].simout["y"][0].shape,system.species["E_nsI"].simout["y"][0].shape)
         response = system.sum_species_simout(whitelist=response_sp)
         response = np.array([simout[-1] for simout in response])
         response /= system.species[E_spname].y0 # normalize to total E

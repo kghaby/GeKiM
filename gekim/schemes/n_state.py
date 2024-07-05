@@ -410,10 +410,7 @@ class NState:
         # simout can be a list or a np.ndarray depending on if initial concentrations were arrays or scalars
         if isinstance(self.simout["y"], list):
             len_simouts = len(self.simout["y"])
-            first_simout = self.simout["y"][0]
-            len_species, len_simpoints = first_simout.shape
-            first_species_first_simout = first_simout[0]
-            total_y = [np.zeros_like(first_species_first_simout) for _ in range(len_simouts)]
+            total_y = [np.zeros_like(self.simout["y"][i][0]) for i in range(len_simouts)]
             simout_is_list = True
         elif isinstance(self.simout["y"], np.ndarray):
             first_species_simout = self.simout["y"][0]
@@ -432,7 +429,9 @@ class NState:
             if simout_is_list:
                 simouts = self.species[name].simout["y"]
                 for i,simout in enumerate(simouts):
+                    print(name,i,simout.shape)
                     total_y[i] += simout
+
             else:
                 total_y += self.species[name].simout["y"]
         return total_y

@@ -1141,7 +1141,7 @@ class Experiments:
         if k_changes is not None:
             for k_name, k_val in k_changes.items():
                 if k_name not in system.transitions:
-                    raise ValueError(f"{k_name} not found in scheme transitions.")
+                    raise ValueError(f"{k_name} not found in system transitions.")
                 system.transitions[k_name].k = k_val
         system.simulator = ODESolver(system)
         system.simulator.simulate(**sim_kwargs)

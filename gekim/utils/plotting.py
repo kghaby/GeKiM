@@ -31,6 +31,11 @@ def assign_colors_to_species(schemes: dict, saturation_range: tuple = (0.5, 0.7)
     dict: Updated schemes with assigned colors. Edits original input dict.
     """
     #TODO: handle list of schemes and NState class
+    #TODO: support cmaps
+        # if hasattr(cmap, "colors"):
+        #     color = cmap.colors[i%len(cmap.colors)]
+        # else:
+        #     color = cmap(i / len(permutations))
     if not isinstance(schemes, dict):
         raise ValueError("Input should be a dictionary of schemes or a single scheme formatted as a dictionary.")
     

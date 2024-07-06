@@ -397,7 +397,12 @@ class NState:
             raise ValueError("Provide either a whitelist or a blacklist, not both.")
 
         species_names = self.species.keys()
-        
+
+        if isinstance(whitelist, str):
+            whitelist = [whitelist]
+        if isinstance(blacklist, str):
+            blacklist = [blacklist]
+            
         if whitelist:
             species_names = [name for name in whitelist if name in species_names]
         elif blacklist:

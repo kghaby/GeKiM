@@ -4,6 +4,8 @@ from itertools import product
 import weakref
 from ..schemes.n_state import NState
 
+# TODO: make base output class
+
 class BaseSimulator(ABC):
     def __init__(self, system: NState):
         """

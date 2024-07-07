@@ -3,6 +3,8 @@ from scipy.integrate import solve_ivp
 from sympy import symbols, Matrix, prod, pretty, zeros, lambdify
 from .base_simulator import BaseSimulator
 
+
+
 class ODESolver(BaseSimulator):
     """
     Parameters

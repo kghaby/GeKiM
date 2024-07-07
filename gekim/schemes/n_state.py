@@ -6,7 +6,12 @@ from collections import defaultdict
 from typing import Union
 from ..utils.helpers import integerable_float
 from ..utils.logging import Logger
-#todo: dataclasses for species transitions and paths 
+#TODO: dataclasses for species transitions and paths 
+
+#TODO: ISSUE: deepcopy(NState) does not work properly. Even on a presimulated system, the copied one requires simulator to be reset. 
+#       simin attribute of NState is not recognized even though NState.simin returns the simin.
+#       is this bc of weakref? 
+            
 class Species:
     def __init__(self, name: str, y0: Union[np.ndarray,float], label=None, color=None):
             """

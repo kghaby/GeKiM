@@ -3,7 +3,10 @@ from scipy.integrate import solve_ivp
 from sympy import symbols, Matrix, prod, pretty, zeros, lambdify
 from .base_simulator import BaseSimulator
 
-
+# TODO: a lot of stuff like lmfit minimizer. probably for the base class. 
+#   for example, progress bar. 
+# TODO: do a Simulator class that takes a method option and then points to classes like ODESolver, Gillespie, etc.? 
+#   The NState system would be like the model function in a lmfit minimizer.
 
 class ODESolver(BaseSimulator):
     """

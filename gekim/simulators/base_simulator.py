@@ -57,12 +57,59 @@ class BaseSimulator(ABC):
         """
         Create a matrix of initial conditions for the system.
         """
-        combinations = product(*(
-            np.atleast_1d(np.atleast_1d(sp_data.y0).flatten())
-            for _, sp_data in self.system.species.items()
-        ))
-        y0_mat = np.vstack([comb for comb in combinations])
-        return y0_mat
+        num_species = len(self.system.species)
+
+        elementwise_groups = []
+        product_groups = []
+        first_sp_name = None
+
+        for sp_name, sp_data in self.system.species.items():
+            sp_data.y0 = np.atleast_1d(np.atleast_1d(sp_data.y0).flatten())
+            y0_array = sp_data.y0
+
+            if sp_data.combination_rule == 'elementwise' and len(y0_array) > 1:
+                if len(elementwise_groups) == 0:
+                    first_sp_name = sp_name
+                    elementwise_groups.append(y0_array[:, None])
+                else:
+                    # Zip 
+                    if len(y0_array) != elementwise_groups[0].shape[0]:
+                        raise ValueError(f"Mismatch in y0 lengths for elementwise combination: {len(y0_array)} ({sp_name}) vs {elementwise_groups[0].shape[0]} ({first_sp_name})")
+                    elementwise_groups[-1] = np.hstack([elementwise_groups[-1], y0_array[:, None]])
+            elif sp_data.combination_rule == 'product' or len(y0_array) == 1:
+                product_groups.append((sp_data.index, y0_array))
+            else:
+                raise ValueError(f"Unknown combination rule '{sp_data.combination_rule}' for species '{sp_data.name}'.")
+
+        if elementwise_groups:
+            elementwise_mat = elementwise_groups[-1]
+        else:
+            elementwise_mat = np.ones((1, 1))  # Placeholder 
+
+        # Combine elementwise and product combinations
+        if product_groups:
+            product_combinations = np.array(list(product(*(pg[1] for pg in product_groups))))
+            if elementwise_mat.size > 1:
+                combined_mat = np.array([np.hstack((e, p)) for e in elementwise_mat for p in product_combinations])
+            else:
+                combined_mat = product_combinations
+        else:
+            combined_mat = elementwise_mat
+
+        # Correct columns based on the species index
+        final_y0_mat = np.zeros((combined_mat.shape[0], num_species))
+        elementwise_idx = 0
+        product_idx = elementwise_mat.shape[1] if elementwise_mat.size > 1 else 0
+        for sp_name, sp_data in self.system.species.items():
+            if sp_data.combination_rule == 'elementwise' and len(sp_data.y0) > 1:
+                final_y0_mat[:, sp_data.index] = combined_mat[:, elementwise_idx]
+                elementwise_idx += 1
+            elif sp_data.combination_rule == 'product' or len(sp_data.y0) == 1:
+                final_y0_mat[:, sp_data.index] = combined_mat[:, product_idx]
+                product_idx += 1
+
+        return final_y0_mat
+
 
 
 

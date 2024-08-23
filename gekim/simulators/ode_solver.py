@@ -332,7 +332,7 @@ class ODESolver(BaseSimulator):
 
         #TODO: progress bar (in solve_ivp?)
 
-        y0_mat = self._make_y0_mat()
+        y0_mat = self._make_y0_mat() # move to intialization unless the y0 has been changed? 
         y0_mat_len = len(y0_mat)
         self.system.log.info(f"Solving the timecourse from {y0_mat_len} initial concentration vectors...")
 

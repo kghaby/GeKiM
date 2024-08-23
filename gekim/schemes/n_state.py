@@ -13,7 +13,7 @@ from ..utils.logging import Logger
 #       is this bc of weakref? 
             
 class Species:
-    def __init__(self, name: str, y0: Union[np.ndarray,float], label=None, color=None):
+    def __init__(self, name: str, y0: Union[np.ndarray,float], label=None, color=None, combination_rule='elementwise'):
             """
             Initialize a species object.
 
@@ -28,6 +28,11 @@ class Species:
                 Useful for plotting. Will default to NAME.
             color : str, optional
                 Useful for plotting. Best added by ..utils.Plotting.assign_colors_to_species().
+            combination_rule : str, optional
+                Determines how y0 values should be combined with others. Only relevant if the y0 is an array.
+                'elementwise' means values will be combined elementwise with other species.
+                'product' means the Cartesian product of y0 values will be taken with other species' y0 values.
+
 
             """
             self.name = name
@@ -38,6 +43,7 @@ class Species:
             self.sym = symbols(name)
             self.simin = None  # added by simulator
             self.simout = None  # added by simulator
+            self.combination_rule = combination_rule
 
     def __repr__(self):
         return f"{self.name} (Initial Concentration: {self.y0}, Label: {self.label})"
@@ -416,7 +422,6 @@ class NState:
         if self.simout is None:
             self.log.error("Simulated data not found in self.simout. Run a simulation first.")
             return None
-
         # simout can be a list or a np.ndarray depending on if initial concentrations were arrays or scalars
         if isinstance(self.simout["y"], list):
             len_simouts = len(self.simout["y"])

@@ -1,4 +1,4 @@
 # TODO
  - lots of comments in files
- - base philosophy on lmfit, pytorch, tensorflow, etc
+ - use lmfit, pytorch, tensorflow, deeptime, etc for inspiration on architecture and philosophy
     - use nn's to get a sense of how and why and usecases for this 

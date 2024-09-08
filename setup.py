@@ -4,8 +4,8 @@ with open('requirements.txt') as f:
     required = f.read().splitlines()
 
 setup(
-    name='GeKiM', 
-    version='0.5.8', 
+    name='gekim', 
+    version='0.6.0', 
     author='Kyle Ghaby', 
     author_email='kyleghaby@gmail.com',  
     description='Generalized Kinetic Modeler: A Python package for modeling arbitrary kinetic schemes.',  

@@ -8,6 +8,7 @@ setup(
     version='0.6.0', 
     author='Kyle Ghaby', 
     author_email='kyleghaby@gmail.com',  
+    license='GPL-3.0',
     description='Generalized Kinetic Modeler: A Python package for modeling arbitrary kinetic schemes.',  
     long_description=open('README.md').read(),  
     long_description_content_type='text/markdown',

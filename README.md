@@ -9,7 +9,7 @@ With pip:
 pip install gekim
 ```
 
-Or directly from the source code (recommended):
+Or directly from the source code:
 ```bash
 git clone https://github.com/kghaby/GeKiM.git
 cd GeKiM

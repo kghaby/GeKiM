@@ -277,7 +277,7 @@ class ODESolver(BaseSimulator):
             print(J_log_str)
         return
 
-    def simulate(self, t_eval: np.ndarray = None, t_span: tuple = None, method='BDF', rtol=1e-3, atol=0, dense_output=False, output_raw=False, **kwargs):
+    def simulate(self, t_eval: np.ndarray = None, t_span: tuple = None, method='LSODA', rtol=1e-3, atol=0, dense_output=False, output_raw=False, **kwargs):
         """
         Solve the differential equations of species concentration wrt time for the system. 
 
@@ -290,7 +290,7 @@ class ODESolver(BaseSimulator):
         t_span : tuple, optional
             Time span for rate solutions.
         method : str, optional
-            Integration method, default is 'BDF'.
+            Integration method, default is 'LSODA'.
         rtol : float, optional
             Relative tolerance for the solver. Default is 1e-3.
         atol : float, optional
@@ -413,6 +413,23 @@ class ODESolver(BaseSimulator):
         est_t_span = (0, est_time_scale) # Start at 0 or np.abs(filtered_eigenvalues).min()?
         return est_t_span
     
+    @staticmethod
+    def estimate_ss(J0: np.ndarray) -> np.ndarray:
+        """
+        Estimate the steady state concentrations using a numerical Jacobian.
+        Parameters:
+        ----------
+        J0 : np.ndarray
+            The Jacobian of the initial conditions of the system
+        """
+        rows = J0.shape[0]
+        J_constraint =  np.vstack((J0[:-1], np.ones(rows)))
+        vec_constraint = np.vstack((np.zeros((rows - 1, 1)), [1]))
+        # Use lstsq bc J0 could be singular or overdetermined
+        solution, _, _, _ = np.linalg.lstsq(J_constraint, vec_constraint, rcond=None) 
+        solution[np.abs(solution) < 1e-12] = 0
+        return solution
+    
     def _process_simouts(self, raw_simouts: list, y0_mat_len: int, dense_output=False):
         if y0_mat_len == 1:
             self.system.simout["t"] = raw_simouts[0].t
@@ -441,3 +458,4 @@ class ODESolver(BaseSimulator):
                 self.system.simout["soln_continuous"] = None
                 self.system.log.info("\tNot saving continuous solutions. Use dense_output=True to save them to SYSTEM.simout['soln_continuous']")
         return
+

@@ -352,7 +352,9 @@ class ODESolver(BaseSimulator):
             if input_t_span is None:
                 if input_t_eval is None:
                     J0 = self.system.simin["J_func_wrap"](None, y0)
+                    
                     t_span = self.estimate_t_span(J0)
+                    print(self.estimate_ss(J0))
                     self.system.log.info(f"\tEstimated time scale: {t_span[1]:.2e} (1/<rate constant units>)")
                 else:
                     t_span = (t_eval[0], t_eval[-1])

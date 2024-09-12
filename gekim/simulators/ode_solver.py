@@ -65,7 +65,6 @@ class ODESolver(BaseSimulator):
         self.log_jac()
         self.gradient_norms = []
         self.current_gradient = None
-        
         self.max_order = self.get_max_order()
         
     def get_max_order(self):
@@ -77,30 +76,22 @@ class ODESolver(BaseSimulator):
         
     def _create_gradient_event(self, tol=5e-6, memory=5):
         def gradient_event(t, conc):
-            if self.current_gradient is not None:
+            self._event_step += 1
+            if self.current_gradient is not None and self._event_step % memory == 0:
                 gradient_norm = np.linalg.norm(self.current_gradient)
                 if len(self.gradient_norms) > memory+1:
-                    diffs = np.array([gradient_norm - self.gradient_norms[i] for i in range(-1, -memory-1, -1)])
+                    diffs = np.array([gradient_norm - self.gradient_norms[i] for i in range(-1, -2-1, -1)])
                     if np.all(np.abs(diffs) < tol/30):
                         # print("diffs",t)
-                        result = 0  
+                        self._event_result = 0  
                     elif gradient_norm < tol:
                         # print("norm", t)
-                        result = 0  
-                    else:
-                        result = 1
-                else:
-                    result = 1
-
+                        self._event_result = 0  
                 self.gradient_norms.append(gradient_norm)
-            else:
-                result = 1
-            return result
-
+            return self._event_result
         gradient_event.terminal = True
         gradient_event.direction = -1
         return gradient_event
-
 
     def _generate_matrices_for_rates_func(self):
         """
@@ -139,7 +130,6 @@ class ODESolver(BaseSimulator):
             self.system.simin["stoich_mat"][tr_idx] = product_vec - reactant_vec
 
         self.system.simin["k_diag"] = np.diag(self.system.simin["k_vec"])
-
         return
     
     def _rates_func(self, t, conc):
@@ -156,8 +146,6 @@ class ODESolver(BaseSimulator):
         N_K = np.dot(self.system.simin["k_diag"],self.system.simin["stoich_mat"]) # interactions
         self.current_gradient = np.dot(C_Nr,N_K)
         return self.current_gradient
-    
-
     
     def _generate_rates_sym(self):
         """
@@ -371,9 +359,7 @@ class ODESolver(BaseSimulator):
             # Check gradient after and simulate more if needed
 
         #TODO: progress bar (in solve_ivp?)
-        
-        
-        
+
         y0_mat = self._make_y0_mat() # move to intialization unless the y0 has been changed? 
         y0_mat_len = len(y0_mat)
         self.system.log.info(f"Solving the timecourse from {y0_mat_len} initial concentration vectors...")
@@ -397,6 +383,9 @@ class ODESolver(BaseSimulator):
                     t_span = self.estimate_t_span(J0,self.max_order)
                     self.system.log.info(f"\t(Over)estimated time scale: {t_span[1]:.2e} (1/<rate constant units>)"
                                          f"\tAdding an event for gradient convergence.")
+                    # Set up event
+                    self._event_step = 0
+                    self._event_result = 1
                     self.gradient_event = self._create_gradient_event()
                     if "events" in kwargs:
                         kwargs["events"].append(self.gradient_event)
@@ -404,8 +393,9 @@ class ODESolver(BaseSimulator):
                         kwargs["events"] = self.gradient_event
                 else:
                     t_span = (t_eval[0], t_eval[-1])
+
             soln = solve_ivp(self._rates_func, t_span=t_span, y0=y0, method=method, t_eval=t_eval, 
-                                rtol=rtol, atol=atol, jac=self.system.simin["J_func_wrap"], dense_output=dense_output,  **kwargs) 
+                                rtol=rtol, atol=atol, jac=self.system.simin["J_func_wrap"], dense_output=dense_output, **kwargs) 
                 # vectorized=True makes legacy rate func slower bc low len(y0) I think
             if not soln.success:
                 raise RuntimeError("FAILED: " + soln.message)

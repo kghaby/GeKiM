@@ -64,7 +64,6 @@ class ODESolver(BaseSimulator):
         self._generate_jac() 
         self.log_jac()
         self.gradient_norms = []
-        self.current_gradient = None
         self.max_order = self.get_max_order()
         
     def get_max_order(self):
@@ -73,25 +72,6 @@ class ODESolver(BaseSimulator):
             order = sum(coeff for _, coeff in tr.source)
             orders.append(order)
         return np.max(np.array(orders)) 
-        
-    def _create_gradient_event(self, tol=5e-6, memory=5):
-        def gradient_event(t, conc):
-            self._event_step += 1
-            if self.current_gradient is not None and self._event_step % memory == 0:
-                gradient_norm = np.linalg.norm(self.current_gradient)
-                if len(self.gradient_norms) > memory+1:
-                    diffs = np.array([gradient_norm - self.gradient_norms[i] for i in range(-1, -2-1, -1)])
-                    if np.all(np.abs(diffs) < tol/30):
-                        # print("diffs",t)
-                        self._event_result = 0  
-                    elif gradient_norm < tol:
-                        # print("norm", t)
-                        self._event_result = 0  
-                self.gradient_norms.append(gradient_norm)
-            return self._event_result
-        gradient_event.terminal = True
-        gradient_event.direction = -1
-        return gradient_event
 
     def _generate_matrices_for_rates_func(self):
         """
@@ -383,14 +363,6 @@ class ODESolver(BaseSimulator):
                     t_span = self.estimate_t_span(J0,self.max_order)
                     self.system.log.info(f"\t(Over)estimated time scale: {t_span[1]:.2e} (1/<rate constant units>)"
                                          f"\tAdding an event for gradient convergence.")
-                    # Set up event
-                    self._event_step = 0
-                    self._event_result = 1
-                    self.gradient_event = self._create_gradient_event()
-                    if "events" in kwargs:
-                        kwargs["events"].append(self.gradient_event)
-                    else:
-                        kwargs["events"] = self.gradient_event
                 else:
                     t_span = (t_eval[0], t_eval[-1])
 
@@ -446,7 +418,7 @@ class ODESolver(BaseSimulator):
         if filtered_eigenvalues.size == 0:
             raise ValueError("No eigenvalues above the threshold, unable to estimate time scale.")
         naive_time_scale = 1 / (np.abs(filtered_eigenvalues).min())
-        est_time_scale = naive_time_scale * 10**max_order
+        est_time_scale = naive_time_scale * 6.5 * max_order
         est_t_span = (0, est_time_scale) # Start at 0 or np.abs(filtered_eigenvalues).min()?
         return est_t_span
     

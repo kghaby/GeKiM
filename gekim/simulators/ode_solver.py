@@ -354,7 +354,6 @@ class ODESolver(BaseSimulator):
                     J0 = self.system.simin["J_func_wrap"](None, y0)
                     
                     t_span = self.estimate_t_span(J0)
-                    print(self.estimate_ss(J0))
                     self.system.log.info(f"\tEstimated time scale: {t_span[1]:.2e} (1/<rate constant units>)")
                 else:
                     t_span = (t_eval[0], t_eval[-1])
@@ -414,23 +413,6 @@ class ODESolver(BaseSimulator):
         est_time_scale = naive_time_scale * 6.5
         est_t_span = (0, est_time_scale) # Start at 0 or np.abs(filtered_eigenvalues).min()?
         return est_t_span
-    
-    @staticmethod
-    def estimate_ss(J0: np.ndarray) -> np.ndarray:
-        """
-        Estimate the steady state concentrations using a numerical Jacobian.
-        Parameters:
-        ----------
-        J0 : np.ndarray
-            The Jacobian of the initial conditions of the system
-        """
-        rows = J0.shape[0]
-        J_constraint =  np.vstack((J0[:-1], np.ones(rows)))
-        vec_constraint = np.vstack((np.zeros((rows - 1, 1)), [1]))
-        # Use lstsq bc J0 could be singular or overdetermined
-        solution, _, _, _ = np.linalg.lstsq(J_constraint, vec_constraint, rcond=None) 
-        solution[np.abs(solution) < 1e-12] = 0
-        return solution
     
     def _process_simouts(self, raw_simouts: list, y0_mat_len: int, dense_output=False):
         if y0_mat_len == 1:

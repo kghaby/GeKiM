@@ -418,7 +418,7 @@ class ODESolver(BaseSimulator):
         if filtered_eigenvalues.size == 0:
             raise ValueError("No eigenvalues above the threshold, unable to estimate time scale.")
         naive_time_scale = 1 / (np.abs(filtered_eigenvalues).min())
-        est_time_scale = naive_time_scale * 6.5 * max_order
+        est_time_scale = naive_time_scale * 5 * max_order
         est_t_span = (0, est_time_scale) # Start at 0 or np.abs(filtered_eigenvalues).min()?
         return est_t_span
     

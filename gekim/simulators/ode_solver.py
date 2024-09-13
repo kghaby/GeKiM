@@ -1,13 +1,7 @@
 import numpy as np
 from scipy.integrate import solve_ivp
 from sympy import symbols, Matrix, prod, pretty, zeros, lambdify
-from collections import defaultdict
 from .base_simulator import BaseSimulator
-from sympy import symbols, Matrix
-from copy import deepcopy
-from collections import deque
-
-
 
 # TODO: a lot of stuff like lmfit minimizer. probably for the base class. 
 #   for example, progress bar. 
@@ -366,7 +360,7 @@ class ODESolver(BaseSimulator):
             if input_t_span is None:
                 if input_t_eval is None:
                     J0 = self.system.simin["J_func_wrap"](None, y0)
-                    t_span = self.estimate_t_span()
+                    t_span = self.estimate_t_span(J0,self.max_order)
                     self.system.log.info(f"\t(Over)estimated time scale: {t_span[1]:.2e} (1/<rate constant units>)"
                                          f"\tAdding an event for gradient convergence.")
                 else:
@@ -393,97 +387,39 @@ class ODESolver(BaseSimulator):
             self.system.log.info("Not returning raw solver output. Use output_raw=True to return raw data.\n")
             return
 
-    def estimate_t_span(self) -> tuple[float, float]:
+    @staticmethod
+    def estimate_t_span(J0: np.ndarray,max_order) -> tuple[float, float]:
         """
-        Estimate the timespan needed for convergence based on the eigenvalues of the Jacobian 
-        at concentration vectors where each species is at its maximum possible concentration,
-        adjusted according to stoichiometry and mass conservation.
-
+        Estimate the timespan needed for convergence based on the 
+        smallest magnitude of the Jacobian eigenvalues at initial conditions
+        
+        Parameters:
+        ----------
+        J0 : np.ndarray
+            The Jacobian of the initial conditions of the system
+        
         Returns:
         -------
         tuple[float, float]
             A tuple containing the estimated timespan needed for convergence.
+            The first element of the tuple is the start time (0) and the second
+            element is the estimated end time based on the smallest magnitude
+            of the Jacobian eigenvalues at the initial conditions.
+        
+        Raises:
+        ------
+        ValueError
+            If no eigenvalues above the threshold are found, indicating that
+            the time scale cannot be estimated.
         """
-        species_names = list(self.system.species.keys())
-        initial_concs = {sp_name: np.max(self.system.species[sp_name].y0) for sp_name in species_names}
-
-        def simulate_max_production(target_sp_name):
-            # Initialize concentrations 
-            conc_vector = {sp_name: initial_concs[sp_name] for sp_name in species_names}
-            processed_species = set()
-            species_queue = [target_sp_name]
-            while species_queue:
-                sp_name = species_queue.pop(0)
-                if sp_name in processed_species:
-                    continue
-                processed_species.add(sp_name)
-                # If sp_name is an initial species, cannot produce more
-                if self.system.species[sp_name].y0.any():
-                    continue  
-                # Find reactions that produce sp_name
-                producing_transitions = []
-                for tr in self.system.transitions.values():
-                    # Check if sp_name is in products
-                    if any(prod_sp == sp_name for prod_sp, _ in tr.target):
-                        producing_transitions.append(tr)
-                # For each producing transition, try to perform it to the maximum extent
-                for tr in producing_transitions:
-                    reactant_limits = []
-                    for reactant_sp, coeff in tr.source:
-                        available_conc = conc_vector[reactant_sp]
-                        limit = available_conc / coeff if coeff != 0 else np.inf
-                        reactant_limits.append(limit)
-                    max_extent = min(reactant_limits)
-                    if max_extent <= 0:
-                        continue 
-                    # Update concentrations
-                    for reactant_sp, coeff in tr.source:
-                        conc_vector[reactant_sp] -= coeff * max_extent
-                        if conc_vector[reactant_sp] < 0:
-                            conc_vector[reactant_sp] = 0 
-                        if reactant_sp not in processed_species and not self.system.species[reactant_sp].y0.any():
-                            species_queue.append(reactant_sp)
-                    for product_sp, coeff in tr.target:
-                        conc_vector[product_sp] += coeff * max_extent
-                        if product_sp not in processed_species and not self.system.species[product_sp].y0.any():
-                            species_queue.append(product_sp)
-            return conc_vector
-
-        # Generate concentration vectors for each species
-        max_conc_vectors = []
-        for sp_name in species_names:
-            conc_vector = simulate_max_production(sp_name)
-            max_conc_vectors.append(conc_vector)
-
-        # Remove duplicates
-        unique_conc_vectors = []
-        seen_vectors = []
-        for conc_vector in max_conc_vectors:
-            # Convert to tuple for comparison
-            conc_tuple = tuple(conc_vector[sp_name] for sp_name in species_names)
-            if conc_tuple not in seen_vectors:
-                seen_vectors.append(conc_tuple)
-                unique_conc_vectors.append(conc_vector)
-        
-        # Compute Jacobian at each concentration vector
-        eigenvalues_list = []
-        # unique_conc_vectors.append({'I': 0.5, 'E': 0.5, 'E_I': 0, '(EI)': 0, '(EI2)': 0})
-        for conc_vector in unique_conc_vectors:
-            # print(conc_vector)
-            J_sym = self.system.simin["J_symsp_numtr"]
-            substitution = {self.system.species[sp_name].sym: conc_vector[sp_name] for sp_name in species_names}
-            J_numeric = J_sym.subs(substitution)
-            J_numeric_array = np.array(J_numeric).astype(np.float64)
-            eigenvalues = np.linalg.eigvals(J_numeric_array)
-            eigenvalues_list.extend(eigenvalues)
-        
-        # Determine slowest time scale
-        eigenvalue_threshold = 1e-6
-        filtered_eigenvalues = np.array(eigenvalues_list)[np.abs(eigenvalues_list) > eigenvalue_threshold]
+        eigenvalues = np.linalg.eigvals(J0)
+        eigenvalue_threshold = 1e-6 # below 1e-6 is considered insignificant. float32 cutoff maybe
+        filtered_eigenvalues = eigenvalues[np.abs(eigenvalues) > eigenvalue_threshold] 
         if filtered_eigenvalues.size == 0:
-            raise ValueError("No eigenvalues above threshold")
-        slowest_time_scale = 1 / np.min(np.abs(filtered_eigenvalues))
-        est_t_span = (0, slowest_time_scale * 5)  
+            raise ValueError("No eigenvalues above the threshold, unable to estimate time scale.")
+        naive_time_scale = 1 / (np.abs(filtered_eigenvalues).min())
+        est_time_scale = naive_time_scale * 5 * max_order
+        est_t_span = (0, est_time_scale) # Start at 0 or np.abs(filtered_eigenvalues).min()?
         return est_t_span
     
     def _process_simouts(self, raw_simouts: list, y0_mat_len: int, dense_output=False):

@@ -3,6 +3,7 @@ from math import log10, floor
 import sys
 from io import StringIO
 from itertools import product,islice
+from decimal import Decimal, ROUND_HALF_UP
 
 
 def rate_pair_from_P(int_OOM,P_B) -> tuple:
@@ -66,10 +67,13 @@ def round_sig(num: float, sig_figs: int = 3, autoformat=True):
     order_of_magnitude = floor(log10(abs(num)))
     shift = sig_figs - 1 - order_of_magnitude
 
-    # Scale the number, round it, and scale it back
-    scaled_num = num * (10 ** shift)
-    rounded_scaled_num = floor(scaled_num + 0.5)
-    result = rounded_scaled_num / (10 ** shift)
+    # Use Decimal for precise arithmetic
+    decimal_num = Decimal(num)
+    decimal_shift = Decimal(10) ** shift
+    scaled_num = decimal_num * decimal_shift
+    rounded_scaled_num = scaled_num.quantize(Decimal('1'), rounding=ROUND_HALF_UP)
+    result = rounded_scaled_num / decimal_shift
+    result = float(result)
 
     # Handling scientific notation conditionally
     if autoformat and (order_of_magnitude >= 4 or order_of_magnitude <= -4):

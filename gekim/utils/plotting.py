@@ -1,7 +1,17 @@
 import colorsys
 import numpy as np 
 from matplotlib.colors import LinearSegmentedColormap
+import matplotlib.pyplot as plt
 from colorsys import rgb_to_hsv, hsv_to_rgb
+import gc
+
+def clear_fig(fig: plt.Figure):
+    """Clear and garbage collect a matplotlib figure"""
+    for ax in fig.get_axes():
+        ax.clear()
+    fig.clear()
+    gc.collect()
+    return
 
 def assign_colors_to_species(schemes: dict, saturation_range: tuple = (0.5, 0.7), lightness_range: tuple = (0.3, 0.4), 
                             method: str = None, offset: float = 0, overwrite_existing=False, seed: int = None):

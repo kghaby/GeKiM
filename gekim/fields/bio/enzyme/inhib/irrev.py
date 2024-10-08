@@ -12,7 +12,7 @@ from .....utils.fitting import general_fit, merge_params
 
 #TODO: fit to scheme. meaning yuo make a scheme without values for the transitions and fit it to occ data to see what values of rates satisfy curve
 
-def occ_final_wrt_t(t,kobs,Etot,uplim=1) -> np.ndarray:
+def occ_final_wrt_t(t, kobs, Etot, uplim=1) -> np.ndarray:
     '''
     Calculate the occupancy of final occupancy (Occ_cov) with respect to time.
 
@@ -186,7 +186,7 @@ def kobs_KI_uplim_fit_to_occ_total_wrt_t(t: np.ndarray, occ_tot: np.ndarray, non
     lm_params = merge_params(default_params, nondefault_params)
     return general_fit(occ_total_wrt_t, t, occ_tot, lm_params, xlim=xlim, weights_kde=weights_kde, weights=weights, verbosity=verbosity, **kwargs)
 
-def kobs_wrt_concI0(concI0,KI,kinact,n=1): 
+def kobs_wrt_concI0(concI0, KI, kinact, n=1): 
     '''
     Calculates the observed rate constant kobs with respect to the initial 
     concentration of the inhibitor using a Michaelis-Menten-like equation.

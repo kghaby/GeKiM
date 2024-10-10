@@ -12,7 +12,7 @@ from .....utils.fitting import general_fit, merge_params
 
 #TODO: fit to scheme. meaning yuo make a scheme without values for the transitions and fit it to occ data to see what values of rates satisfy curve
 
-def occ_final_wrt_t(t, kobs, Etot, uplim=1) -> np.ndarray:
+def occ_final_wrt_t(t, kobs, Etot, uplim=1, kns=0, concL0=10) -> np.ndarray:
     '''
     Calculate the occupancy of final occupancy (Occ_cov) with respect to time.
 
@@ -26,13 +26,25 @@ def occ_final_wrt_t(t, kobs, Etot, uplim=1) -> np.ndarray:
         Total concentration of E across all species.
     uplim : float, optional
         Upper limit scalar of the curve. The fraction of total E typically. Default is 1, i.e., 100%.
+    kns : float, optional
+        Non-specific binding rate constant. Default is 0. 
+    concL0 : float, optional
+        Initial concentration of the ligand. Default is 10. Used for nonspecific term.
 
     Returns
     -------
     np.ndarray
         Occupancy of final occupancy (Occ_cov).
+        
+    Notes
+    -----
+    The nonspecific term is linear and not does model ligand consumption. 
+    
+    For high ligand concentrations, the nonspecific term will dominate. 
+    
+    Careful that the ligand concentration is not significantly diminished by nonspecific binding during the time course, if you want a well-behaved fit.
     '''
-    return uplim * Etot * (1 - np.e**(-kobs * t))
+    return uplim * Etot * (1 - np.e**(-kobs * t)) + Etot * concL0 * kns * t
 
 def kobs_uplim_fit_to_occ_final_wrt_t(t, occ_final, nondefault_params: Union[dict,lmfitParameters] = None, xlim: tuple = None, 
                                         weights_kde=False, weights: np.ndarray = None, verbosity=2, **kwargs) -> ModelResult:
@@ -55,6 +67,10 @@ def kobs_uplim_fit_to_occ_final_wrt_t(t, occ_final, nondefault_params: Union[dic
         default_params.add('Etot', value=1, vary=False, min=0, max=np.inf)
         # Scales the upper limit of the curve
         default_params.add('uplim', value=1, vary=True, min=0, max=np.inf)
+        # Non-specific binding rate constant
+        default_params.add('kns', value=0, vary=False, min=0, max=np.inf)
+        # Initial concentration of the ligand (for nonspecific term)
+        default_params.add('concL0', value=10, vary=False, min=0, max=np.inf)
         ```
         Example dict of nondefaults:
         ```python
@@ -86,6 +102,8 @@ def kobs_uplim_fit_to_occ_final_wrt_t(t, occ_final, nondefault_params: Union[dic
     default_params.add('kobs', value=0.01, vary=True, min=0, max=np.inf)
     default_params.add('Etot', value=1, vary=False, min=0, max=np.inf)
     default_params.add('uplim', value=1, vary=True, min=0, max=np.inf)
+    default_params.add('kns', value=0, vary=False, min=0, max=np.inf)
+    default_params.add('concL0', value=10, vary=False, min=0, max=np.inf)
 
     lm_params = merge_params(default_params, nondefault_params)
 

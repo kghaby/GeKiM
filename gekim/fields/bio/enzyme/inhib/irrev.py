@@ -12,7 +12,7 @@ from .....utils.fitting import general_fit, merge_params
 
 #TODO: fit to scheme. meaning yuo make a scheme without values for the transitions and fit it to occ data to see what values of rates satisfy curve
 
-def occ_final_wrt_t(t, kobs, Etot, uplim=1, kns=0, concL0=10) -> np.ndarray:
+def occ_final_wrt_t(t, kobs, Etot, uplim=1, kns=0, concI0=10) -> np.ndarray:
     '''
     Calculate the occupancy of final occupancy (Occ_cov) with respect to time.
 
@@ -28,7 +28,7 @@ def occ_final_wrt_t(t, kobs, Etot, uplim=1, kns=0, concL0=10) -> np.ndarray:
         Upper limit scalar of the curve. The fraction of total E typically. Default is 1, i.e., 100%.
     kns : float, optional
         Non-specific binding rate constant. Default is 0. 
-    concL0 : float, optional
+    concI0 : float, optional
         Initial concentration of the ligand. Default is 10. Used for nonspecific term.
 
     Returns
@@ -44,7 +44,7 @@ def occ_final_wrt_t(t, kobs, Etot, uplim=1, kns=0, concL0=10) -> np.ndarray:
     
     Careful that the ligand concentration is not significantly diminished by nonspecific binding during the time course, if you want a well-behaved fit.
     '''
-    return uplim * Etot * (1 - np.e**(-kobs * t)) + Etot * concL0 * kns * t
+    return uplim * Etot * (1 - np.e**(-kobs * t)) + Etot * concI0 * kns * t
 
 def kobs_uplim_fit_to_occ_final_wrt_t(t, occ_final, nondefault_params: Union[dict,lmfitParameters] = None, xlim: tuple = None, 
                                         weights_kde=False, weights: np.ndarray = None, verbosity=2, **kwargs) -> ModelResult:
@@ -70,7 +70,7 @@ def kobs_uplim_fit_to_occ_final_wrt_t(t, occ_final, nondefault_params: Union[dic
         # Non-specific binding rate constant
         default_params.add('kns', value=0, vary=False, min=0, max=np.inf)
         # Initial concentration of the ligand (for nonspecific term)
-        default_params.add('concL0', value=10, vary=False, min=0, max=np.inf)
+        default_params.add('concI0', value=10, vary=False, min=0, max=np.inf)
         ```
         Example dict of nondefaults:
         ```python
@@ -103,7 +103,7 @@ def kobs_uplim_fit_to_occ_final_wrt_t(t, occ_final, nondefault_params: Union[dic
     default_params.add('Etot', value=1, vary=False, min=0, max=np.inf)
     default_params.add('uplim', value=1, vary=True, min=0, max=np.inf)
     default_params.add('kns', value=0, vary=False, min=0, max=np.inf)
-    default_params.add('concL0', value=10, vary=False, min=0, max=np.inf)
+    default_params.add('concI0', value=10, vary=False, min=0, max=np.inf)
 
     lm_params = merge_params(default_params, nondefault_params)
 
@@ -284,6 +284,83 @@ def KI_kinact_n_fit_to_kobs_wrt_concI0(concI0: np.ndarray, kobs: np.ndarray, non
 
     lm_params = merge_params(default_params, nondefault_params)
     return general_fit(kobs_wrt_concI0, concI0, kobs, lm_params, xlim=xlim, weights_kde=weights_kde, weights=weights, verbosity=verbosity, **kwargs)
+
+def kobs_wrt_concI0_1step(concI0, Eff, y_ctrl=0): 
+    '''
+    Calculates the observed rate constant kobs with respect to the initial 
+    concentration of the inhibitor using the second-order efficiency constant, kinact/KI.
+
+    Parameters
+    ----------
+    concI0 : np.ndarray
+        Array of initial concentrations of the inhibitor.
+    Eff : float
+        Inactivation efficiency (ie covalent efficiency)
+    y_ctrl : float, optional
+        Control value for the y-intercept. Default is 0.
+
+    Returns
+    -------
+    np.ndarray
+        Array of kobs values, the first order observed rate constants of inactivation, 
+        with units of inverse time.
+    
+    Notes
+    -----
+    Assumes that concI is constant over the timecourses where kobs is calculated. 
+    '''
+    return Eff * concI0 + y_ctrl
+
+def Eff_fit_to_kobs_wrt_concI0(concI0: np.ndarray, kobs: np.ndarray, nondefault_params: Union[dict,lmfitParameters] = None, xlim: tuple = None, 
+                                        weights_kde=False, weights: np.ndarray = None, verbosity=2, **kwargs) -> ModelResult:
+    """
+    Fit parameters (KI, kinact, n) to kobs with respect to concI0 using 
+    a structured dictionary for parameters.
+
+    Parameters
+    ----------
+    concI0 : np.ndarray
+        Array of initial concentrations of the inhibitor.
+    kobs : np.ndarray
+        Array of observed rate constants.
+    nondefault_params : dict or Parameters, optional
+        A structured dictionary of parameters with 'value','vary', and 'bound' keys or a lmfit.Parameters object.
+        Defaults:
+        ```python
+        default_params.add('Eff', value=1e-4, vary=True, min=0, max=np.inf)
+        default_params.add('y_ctrl', value=0, vary=False, min=0, max=np.inf)
+        ```
+        Example dict of nondefaults:
+        ```python
+        nondefault_params = {
+            "n": {"vary": True},    
+        }
+        ```
+    xlim : tuple, optional
+        Limits for the time points considered in the fit (min_t, max_t).
+    weights_kde : bool, optional
+        If True, calculate the density of the x-values and use the normalized reciprocol as weights. Similar to 1/sigma for scipy.curve_fit.
+        Helps distribute weight over unevenly-spaced points. Default is False.
+    weights : np.ndarray, optional
+        weights parameter for fitting. This argument is overridden if weights_kde=True. Default is None.
+    verbosity : int, optional
+        0: print nothing. 1: print upon bad fit. 2: print always. Default is 2.
+    kwargs : dict, optional
+        Additional keyword arguments to pass to the lmfit Model.fit function.
+
+    Returns
+    -------
+    lmfit.ModelResult
+        The result of the fitting operation from lmfit.
+    
+    Assumes that concI is constant over the timecourses where kobs is calculated. 
+    """
+    default_params = lmfitParameters()
+    default_params.add('Eff', value=1e-4, vary=True, min=0, max=np.inf)
+    default_params.add('y_ctrl', value=0, vary=False, min=0, max=np.inf)
+
+    lm_params = merge_params(default_params, nondefault_params)
+    return general_fit(kobs_wrt_concI0_1step, concI0, kobs, lm_params, xlim=xlim, weights_kde=weights_kde, weights=weights, verbosity=verbosity, **kwargs)
 
 def dose_response(dose: np.ndarray,Khalf: float, kinact: float, t: float, n=1): 
     '''

@@ -338,7 +338,12 @@ class ODESolver(BaseSimulator):
             # refer to k50p_alt2 badI vs badE time scale difference. Example where min eig is very diff for the same timecourse
             # Check gradient after and simulate more if needed
 
-        #TODO: progress bar (in solve_ivp?)
+        #TODO: progress bar (in solve_ivp?). why would i want this? A single sim is so fast
+        #TODO: use output class.
+            # I want to solve the issue of having to return a list of objects or single object depending on the input. Seems like a bad design. 
+            # At least with a class it will always be outputting the same type. But then I'm just passing the issue down to the class right?
+            # The class could implicity handle 1-sized lists like numpy does. 
+            # I mean ig if numpy has input-dependent output types, then this is fine. But maybe there is a way to do it with more finesse and intuitiveness
 
         y0_mat = self._make_y0_mat() # move to intialization unless the y0 has been changed? 
         y0_mat_len = len(y0_mat)

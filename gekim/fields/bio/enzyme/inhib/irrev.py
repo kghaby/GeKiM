@@ -132,7 +132,8 @@ def occ_total_wrt_t(t, kobs, concI0, KI, Etot, uplim=1, kns=0) -> np.ndarray:
         Total concentration of E across all species.
     uplim : float, optional
         Upper limit scalar of the curve. The fraction of total E typically. Default is 1, i.e., 100%.
-
+    kns : float, optional
+        Non-specific binding rate constant. Default is 0. 
     Returns
     -------
     np.ndarray
@@ -167,7 +168,9 @@ def kobs_KI_uplim_fit_to_occ_total_wrt_t(t: np.ndarray, occ_tot: np.ndarray, non
         # Total concentration of E across all species
         default_params.add('Etot', value=1, vary=False, min=0, max=np.inf)
         # Scales the upper limit of the curve
-        default_params.add('uplim', value=1, vary=True, min=0, max=np.inf)      
+        default_params.add('uplim', value=1, vary=True, min=0, max=np.inf)    
+        # Non-specific binding rate constant
+        default_params.add('kns', value=0, vary=False, min=0, max=np.inf)  
         ```
         Example dict of nondefaults:
         ```python

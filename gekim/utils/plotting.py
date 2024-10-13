@@ -46,6 +46,7 @@ def assign_colors_to_species(schemes: dict, saturation_range: tuple = (0.5, 0.7)
         #     color = cmap.colors[i%len(cmap.colors)]
         # else:
         #     color = cmap(i / len(permutations))
+    #TODO: xkcd method for cycling through xkcd colors
     if not isinstance(schemes, dict):
         raise ValueError("Input should be a dictionary of schemes or a single scheme formatted as a dictionary.")
     

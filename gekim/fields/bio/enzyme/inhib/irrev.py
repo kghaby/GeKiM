@@ -112,7 +112,7 @@ def kobs_uplim_fit_to_occ_final_wrt_t(t, occ_final, nondefault_params: Union[dic
 
 
 
-def occ_total_wrt_t(t,kobs,concI0,KI,Etot,uplim=1):
+def occ_total_wrt_t(t, kobs, concI0, KI, Etot, uplim=1, kns=0) -> np.ndarray:
     '''
     Calculates pseudo-first-order total occupancy of all bound states, 
     assuming fast reversible binding equilibrated at t=0.
@@ -140,7 +140,7 @@ def occ_total_wrt_t(t,kobs,concI0,KI,Etot,uplim=1):
     '''
 
     FO = 1 / (1 + (KI / concI0)) # Equilibrium occupancy of reversible portion
-    return uplim * Etot * (1 - (1 - FO) * np.exp(-kobs * t))
+    return uplim * Etot * (1 - (1 - FO) * np.exp(-kobs * t)) + Etot * concI0 * kns * t
 
 def kobs_KI_uplim_fit_to_occ_total_wrt_t(t: np.ndarray, occ_tot: np.ndarray, nondefault_params: Union[dict,lmfitParameters] = None, xlim: tuple = None, 
                                         weights_kde=False, weights: np.ndarray = None, verbosity=2, **kwargs) -> ModelResult:
@@ -200,6 +200,7 @@ def kobs_KI_uplim_fit_to_occ_total_wrt_t(t: np.ndarray, occ_tot: np.ndarray, non
     default_params.add('KI', value=10, vary=True, min=0, max=np.inf)
     default_params.add('Etot', value=1, vary=False, min=0, max=np.inf)
     default_params.add('uplim', value=1, vary=True, min=0, max=np.inf)
+    default_params.add('kns', value=0, vary=False, min=0, max=np.inf)
 
     lm_params = merge_params(default_params, nondefault_params)
     return general_fit(occ_total_wrt_t, t, occ_tot, lm_params, xlim=xlim, weights_kde=weights_kde, weights=weights, verbosity=verbosity, **kwargs)

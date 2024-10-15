@@ -14,6 +14,7 @@ from ..utils.logging import Logger
 #TODO: add_transition with arrow interpretation
 #TODO: get_steady_state which uses the linear method if all transitions are linear (kinetics6 and 5)
 #       automatically uses ODESolver if simulator is not specified
+#TODO: allow a blank system to be made with just the structure. Uses symbols for species and transitions that dont have values 
             
 class Species:
     def __init__(self, name: str, y0: Union[np.ndarray,float], label=None, color=None, combination_rule='elementwise'):

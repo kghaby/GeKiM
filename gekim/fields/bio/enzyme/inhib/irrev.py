@@ -11,6 +11,8 @@ from .....utils.fitting import general_fit, merge_params
 #from .....utils.experiments import ExperimentResult
 
 #TODO: fit to scheme. meaning yuo make a scheme without values for the transitions and fit it to occ data to see what values of rates satisfy curve
+#TODO: class-based fittings will prob be better so that i can have baseclasses, reducing lots of reptition (esp docstrings) 
+#TODO: reorganize? There are starting to be lots of functions
 
 def occ_final_wrt_t(t, kobs, Etot, uplim=1, kns=0, concI0=10) -> np.ndarray:
     '''
@@ -69,7 +71,7 @@ def kobs_uplim_fit_to_occ_final_wrt_t(t, occ_final, nondefault_params: Union[dic
         default_params.add('uplim', value=1, vary=True, min=0, max=np.inf)
         # Non-specific binding rate constant
         default_params.add('kns', value=0, vary=False, min=0, max=np.inf)
-        # Initial concentration of the ligand (for nonspecific term)
+        # Initial concentration of the ligand (for nonspecific term. Can be ignored if kns=0)
         default_params.add('concI0', value=10, vary=False, min=0, max=np.inf)
         ```
         Example dict of nondefaults:

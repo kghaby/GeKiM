@@ -11,39 +11,42 @@ from ..utils.logging import Logger
 #TODO: ISSUE: deepcopy(NState) does not work properly. Even on a presimulated system, the copied one requires simulator to be reset. 
 #       simin attribute of NState is not recognized even though NState.simin returns the simin.
 #       is this bc of weakref? 
+#TODO: add_transition with arrow interpretation
+#TODO: get_steady_state which uses the linear method if all transitions are linear (kinetics6 and 5)
+#       automatically uses ODESolver if simulator is not specified
             
 class Species:
     def __init__(self, name: str, y0: Union[np.ndarray,float], label=None, color=None, combination_rule='elementwise'):
-            """
-            Initialize a species object.
+        """
+        Initialize a species object.
 
-            Parameters
-            ----------
-            name : str
-                Name of the species.
-            y0 : Union[np.ndarray,float]
-                Initial concentration of the species.
-                Array Example: `{"Ligand":np.linspace(1,1500,100)}` for a Michaelis-Menten ligand concentration scan.
-            label : str, optional
-                Useful for plotting. Will default to NAME.
-            color : str, optional
-                Useful for plotting. Best added by ..utils.Plotting.assign_colors_to_species().
-            combination_rule : str, optional
-                Determines how y0 values should be combined with others. Only relevant if the y0 is an array.
-                'elementwise' means values will be combined elementwise with other species.
-                'product' means the Cartesian product of y0 values will be taken with other species' y0 values.
+        Parameters
+        ----------
+        name : str
+            Name of the species.
+        y0 : Union[np.ndarray,float]
+            Initial concentration of the species.
+            Array Example: `{"Ligand":np.linspace(1,1500,100)}` for a Michaelis-Menten ligand concentration scan.
+        label : str, optional
+            Useful for plotting. Will default to NAME.
+        color : str, optional
+            Useful for plotting. Best added by ..utils.Plotting.assign_colors_to_species().
+        combination_rule : str, optional
+            Determines how y0 values should be combined with others. Only relevant if the y0 is an array.
+            'elementwise' means values will be combined elementwise with other species.
+            'product' means the Cartesian product of y0 values will be taken with other species' y0 values.
 
 
-            """
-            self.name = name
-            self.y0 = np.array([y0]) if np.isscalar(y0) else np.array(y0)
-            self.label = label or name
-            self.index = None  # added by NState
-            self.color = color
-            self.sym = symbols(name)
-            self.simin = None  # added by simulator
-            self.simout = None  # added by simulator
-            self.combination_rule = combination_rule
+        """
+        self.name = name
+        self.y0 = np.array([y0]) if np.isscalar(y0) else np.array(y0)
+        self.label = label or name
+        self.index = None  # added by NState
+        self.color = color
+        self.sym = symbols(name)
+        self.simin = None  # added by simulator
+        self.simout = None  # added by simulator
+        self.combination_rule = combination_rule
 
     def __repr__(self):
         return f"{self.name} (Initial Concentration: {self.y0}, Label: {self.label})"
@@ -123,7 +126,7 @@ class Transition:
         return name,coeff
 
     @staticmethod            
-    def _format_state(state,direction=None):
+    def _format_state(state: list, direction=None):
         """
         Format a transition by extracting and combining coefficients and species names.
         Is idempotent.
@@ -146,6 +149,7 @@ class Transition:
             If the transition or species tuples are invalid.
         """
         parsed_species = {}
+        state = state if isinstance(state, list) else [state]
         for sp in state:
             if isinstance(sp, str):
                 name, coeff = Transition._parse_species_string(sp)
@@ -221,53 +225,63 @@ class NState:
 
     
     def __init__(self, config: dict, logfilename=None, quiet=False):
-            """
-            Initialize the NState class with configuration data. Can be any degree of nonlinearity.
+        """
+        Initialize the NState class with configuration data. Can be any degree of nonlinearity.
 
-            Parameters
-            ----------
-            config : dict
-                Configuration containing species and transitions.
-                Species should contain name, initial concentration, and label.
-                Transitions should contain name, source-species, target-species, and k value.
-            logfilename : str, optional
-                Name of the log file (default is None).
-            quiet : bool, optional
-                Flag indicating whether to suppress log output (default is False).
+        Parameters
+        ----------
+        config : dict
+            Configuration containing species and transitions.
+            Species should contain name, initial concentration, and label.
+            Transitions should contain name, source-species, target-species, and k value.
+        logfilename : str, optional
+            Name of the log file (default is None).
+        quiet : bool, optional
+            Flag indicating whether to suppress log output (default is False).
 
-            Raises
-            ------
-            ValueError
-                If config is invalid.
-            """
-            self.log = Logger(quiet=quiet, logfilename=logfilename)
+        Raises
+        ------
+        ValueError
+            If config is invalid.
+        """
+        self._quiet = quiet
+        self.log = Logger(quiet=quiet, logfilename=logfilename)
 
-            self._validate_config(config)
-            self.config = deepcopy(config)
-        
-            self.species = {
-                name: Species(
-                    name=name,
-                    y0=np.array([data["y0"]]) if np.isscalar(data["y0"]) else np.array(data["y0"]),
-                    label=data.get('label', name),
-                    color=data.get('color')
-                ) for name, data in config['species'].items()
-            }
+        self._validate_config(config)
+        self.config = deepcopy(config)
+    
+        self.species = {
+            name: Species(
+                name=name,
+                y0=np.array([data["y0"]]) if np.isscalar(data["y0"]) else np.array(data["y0"]),
+                label=data.get('label', name),
+                color=data.get('color')
+            ) for name, data in config['species'].items()
+        }
 
-            self.transitions = {
-                name: Transition(
-                    name=name,
-                    k=data['k'],
-                    source=data['source'],
-                    target=data['target'],
-                    label=data.get('label', name)
-                ) for name, data in config['transitions'].items()
-            }
+        self.transitions = {
+            name: Transition(
+                name=name,
+                k=data['k'],
+                source=data['source'],
+                target=data['target'],
+                label=data.get('label', name)
+            ) for name, data in config['transitions'].items()
+        }
 
-            self.setup()
-            self.simulator = None
-            self.paths = None
-            self.log.info(f"NState system initialized successfully.\n")
+        self.setup()
+        self.simulator = None
+        self.paths = None
+        self.log.info(f"NState system initialized successfully.\n")
+
+    @property
+    def quiet(self):
+        return self._quiet
+
+    @quiet.setter
+    def quiet(self, value):
+        self._quiet = value
+        self.log.quiet = value
 
     def setup(self):
         """

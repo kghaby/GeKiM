@@ -395,7 +395,7 @@ class ODESolver(BaseSimulator):
     @staticmethod
     def estimate_t_span(J0: np.ndarray,max_order) -> tuple[float, float]:
         """
-        Estimate the timespan needed for convergence based on the 
+        Estimate the timespan needed for convergence (ie characteristic timescale) based on the 
         smallest magnitude of the Jacobian eigenvalues at initial conditions
         
         Parameters:
@@ -417,6 +417,12 @@ class ODESolver(BaseSimulator):
             If no eigenvalues above the threshold are found, indicating that
             the time scale cannot be estimated.
         """
+        # TODO: check if autocorrelation (or jsut some time correlation) is a perdictor of time scale.
+        # TODO: look into characteristic timescale of nonlinear systems 
+        # TODO: There is something to be found in the example of the badI vs badE time scale difference (kw_probes_kinetics.ipynb at the bottom ish)
+        #   The min eig is very different for the same timecourse. 
+        #   Rearrange a nonlinear scheme without changing the timecourse but for the sake of predicting the time scale.
+        
         eigenvalues = np.linalg.eigvals(J0)
         eigenvalue_threshold = 1e-6 # below 1e-6 is considered insignificant. float32 cutoff maybe
         filtered_eigenvalues = eigenvalues[np.abs(eigenvalues) > eigenvalue_threshold] 

@@ -51,7 +51,7 @@ def assign_colors_to_species(schemes: dict, saturation_range: tuple = (0.5, 0.7)
         raise ValueError("Input should be a dictionary of schemes or a single scheme formatted as a dictionary.")
     
     single_scheme = False
-    if 'species' in next(iter(schemes.keys())):
+    if 'species' in schemes.keys() and 'transitions' in schemes.keys():
         single_scheme = True
         schemes = {'single_scheme': schemes}
 

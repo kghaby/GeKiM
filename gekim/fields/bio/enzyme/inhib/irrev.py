@@ -68,7 +68,7 @@ def kobs_uplim_fit_to_occ_final_wrt_t(t, occ_final, nondefault_params: Union[dic
         # Total concentration of E over all species
         default_params.add('Etot', value=1, vary=False, min=0, max=np.inf)
         # Scales the upper limit of the curve
-        default_params.add('uplim', value=1, vary=True, min=0, max=np.inf)
+        default_params.add('uplim', value=1, vary=False, min=0, max=np.inf)
         # Non-specific binding rate constant
         default_params.add('kns', value=0, vary=False, min=0, max=np.inf)
         # Initial concentration of the ligand (for nonspecific term. Can be ignored if kns=0)
@@ -103,7 +103,7 @@ def kobs_uplim_fit_to_occ_final_wrt_t(t, occ_final, nondefault_params: Union[dic
     default_params = lmfitParameters()
     default_params.add('kobs', value=0.01, vary=True, min=0, max=np.inf)
     default_params.add('Etot', value=1, vary=False, min=0, max=np.inf)
-    default_params.add('uplim', value=1, vary=True, min=0, max=np.inf)
+    default_params.add('uplim', value=1, vary=False, min=0, max=np.inf)
     default_params.add('kns', value=0, vary=False, min=0, max=np.inf)
     default_params.add('concI0', value=10, vary=False, min=0, max=np.inf)
 

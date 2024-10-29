@@ -1073,6 +1073,7 @@ class Params:
     """
     Common place for parameters found in covalent inhibition literature.
     """
+    #TODO: rename Constants
     @staticmethod
     def Ki(kon, koff):
         """

@@ -6,3 +6,5 @@
 - more precise reqs
 - Subspecies and better scheme generation so that i dont have to make entirely new copied transitions for modified species, like L and Lsil. 
   - maybe subspecies can share transitions?
+  - class based
+    - identifies missing params and fits them based on data 

@@ -11,3 +11,5 @@
 - Kinetic scheme where there is a continuum of species over a colvar? instead of a continuum of population. and a third party affects the pop dist of this species space which affects the binding, like if all species share a common transition like kon.
   - like NA lecture 10 RecA
   - put in prob dist
+- plotting utils:
+  - interactive plot

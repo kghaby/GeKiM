@@ -14,3 +14,4 @@
   - put in prob dist
 - plotting utils:
   - interactive plot
+- allow symbolic rate constants in case they are not known

@@ -422,6 +422,7 @@ class ODESolver(BaseSimulator):
         # TODO: There is something to be found in the example of the badI vs badE time scale difference (kw_probes_kinetics.ipynb at the bottom ish)
         #   The min eig is very different for the same timecourse. 
         #   Rearrange a nonlinear scheme without changing the timecourse but for the sake of predicting the time scale.
+        #   Use a NN to predict time scale...? Put in schemes and train it with solved schemes that have had their time scale determined.
         
         eigenvalues = np.linalg.eigvals(J0)
         eigenvalue_threshold = 1e-6 # below 1e-6 is considered insignificant. float32 cutoff maybe

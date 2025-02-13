@@ -218,7 +218,7 @@ class Path:
         prob_fmt = "{:.2e}".format(self.probability)
         return f"Path(Length: {str(self.length).rjust(3)},\tProbability: {prob_fmt},\t{path_str})"
 
-class NState:
+class System:
     #TODO: add/remove_species and add/remove_transition methods
     #TODO: reinits if species or transitions are modified. let user able to define custom rate law funcs 
     #TODO: markovian, nonmarkovian, etc

@@ -2,23 +2,23 @@ from abc import ABC, abstractmethod
 import numpy as np
 from itertools import product
 import weakref
-from ..schemes.n_state import NState
+from ..systems.system import System
 
 # TODO: make base output class
 
 class BaseSimulator(ABC):
-    def __init__(self, system: NState):
+    def __init__(self, system: System):
         """
         Initialize the simulator.
 
         Parameters
         ----------
-        system : NState
+        system : System
             The system object. 
 
         Notes
         -----
-        The input NState instance, `system`, will be modified directly 
+        The input System instance, `system`, will be modified directly 
             by the simulator, whether the simulator is added as an attribute to `system` or not.
             
         Initializes the `simin` and `simout` dictionaries of system, species, and transitions objects.

@@ -1,13 +1,27 @@
 
-from importlib.metadata import version, PackageNotFoundError
+"""
+GeKiM: Generalized Kinetic Modeler for Python
+
+GNU General Public License v3.0 (GPL-3.0)
+"""
+
+from importlib.metadata import version as _version
 
 __author__ = "Kyle Ghaby"
 
-try:
-    __version__ = version(__name__)
-except PackageNotFoundError:
-    __version__ = "0.0.0" 
+__version__ = _version(__name__)
 
-__all__ = ['schemes','utils','fields','simulators']
-from . import schemes,utils,fields,simulators
+__all__ = ['utils','fields','simulators',
+           'Scheme', 'Species', 'Transition',
+           'System', 'Path']
+
+# Import with relative paths for API. Internal files use absolute imports.
+from . import utils,fields,simulators
+
+from .schemes.scheme import Scheme
+from .schemes.species import Species
+from .schemes.transition import Transition
+
+from .systems.system import System
+from .systems.path import Path
 

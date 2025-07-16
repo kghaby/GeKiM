@@ -1,5 +1,8 @@
 
-__author__ = "Kyle Ghaby"
+# __author__ = "Kyle Ghaby"
 
-__all__ = ['NState','Transition','Species','Path']
-from .n_state import NState, Transition, Species, Path
+# __all__ = ['Scheme','Transition','Species']
+
+# from .scheme import Scheme
+# from .transition import Transition
+# from .species import Species

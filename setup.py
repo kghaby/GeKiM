@@ -5,7 +5,7 @@ with open('requirements.txt') as f:
 
 setup(
     name='gekim', 
-    version='0.6.3', 
+    version='0.7.0', 
     author='Kyle Ghaby', 
     author_email='kyleghaby@gmail.com',  
     license='GPL-3.0',

@@ -4,11 +4,11 @@ from lmfit.model import ModelResult
 from typing import Union
 from multiprocessing import Pool, cpu_count, Queue, Process
 
-from .....schemes import NState
-from .....simulators import ODESolver
-from .....utils.helpers import update_dict, chunks, printer, CaptureOutput
-from .....utils.fitting import general_fit, merge_params
-#from .....utils.experiments import ExperimentResult
+from gekim.systems.system import System
+from gekim.simulators.ode_solver import ODESolver
+from gekim.utils.helpers import update_dict, chunks, printer, CaptureOutput
+from gekim.utils.fitting import general_fit, merge_params
+#from gekim.utils.experiments import ExperimentResult
 
 #TODO: fit to scheme. meaning yuo make a scheme without values for the transitions and fit it to occ data to see what values of rates satisfy curve
 #TODO: class-based fittings will prob be better so that i can have baseclasses, reducing lots of reptition (esp docstrings) 
@@ -1196,14 +1196,14 @@ class Experiments:
     #TODO: make class for experiment output
     
     @staticmethod
-    def time_response_nofit(scheme: Union[dict,NState], t_eval=None, dose_spname: str = "I", CO_spname: str = "EI", E_spname: str = "E", response_sp: list = None, 
-                    k_changes: dict = None, system_kwargs: dict = None, sim_kwargs: dict = None) -> tuple[NState,np.ndarray]:
+    def time_response_nofit(scheme: Union[dict,System], t_eval=None, dose_spname: str = "I", CO_spname: str = "EI", E_spname: str = "E", response_sp: list = None, 
+                    k_changes: dict = None, system_kwargs: dict = None, sim_kwargs: dict = None) -> tuple[System,np.ndarray]:
         """
         A macro for doing timecourses.
 
         Returns
         -------
-        NState
+        System
             The system object.
         np.ndarray
             The response normalized to the total enzyme.
@@ -1229,11 +1229,11 @@ class Experiments:
                 "quiet": True,
             }
             system_kwargs = update_dict(default_system_kwargs, system_kwargs)
-            system = NState(scheme,**system_kwargs)
-        elif isinstance(scheme, NState):
+            system = System(scheme,**system_kwargs)
+        elif isinstance(scheme, System):
             system = scheme
         else:
-            raise ValueError("scheme must be a dict or NState object.")
+            raise ValueError("scheme must be a dict or System object.")
 
         default_sim_kwargs = {
             "t_eval": t_eval
@@ -1253,15 +1253,15 @@ class Experiments:
         return system, response
 
     @staticmethod
-    def time_response(scheme: Union[dict,NState], t_eval=None, dose_spname: str = "I", CO_spname: str = "EI", E_spname: str = "E", 
+    def time_response(scheme: Union[dict,System], t_eval=None, dose_spname: str = "I", CO_spname: str = "EI", E_spname: str = "E", 
                     k_changes: dict = None, system_kwargs: dict = None, sim_kwargs: dict = None, 
-                    fit_occ_kwargs: dict = None) -> tuple[NState, ModelResult]:
+                    fit_occ_kwargs: dict = None) -> tuple[System, ModelResult]:
         """
         A macro for doing timecourses.
 
         Returns
         -------
-        NState
+        System
             The system object.
         ModelResult
             The fit output.
@@ -1281,10 +1281,10 @@ class Experiments:
 
         if isinstance(scheme, dict):
             concE0 = scheme["species"][E_spname]["y0"]
-        elif isinstance(scheme, NState):
+        elif isinstance(scheme, System):
             concE0 = scheme.species[E_spname].y0
         else:
-            raise ValueError("scheme must be a dict or NState object.")
+            raise ValueError("scheme must be a dict or System object.")
 
         default_fit_occ_kwargs = {
             "nondefault_params" : {
@@ -1310,7 +1310,7 @@ class Experiments:
         indices, doses, scheme, dose_spname, CO_spname, k_changes, system_kwargs, sim_kwargs, fit_occ_kwargs = args
 
         with CaptureOutput() as output:
-            system = NState(scheme,**system_kwargs)
+            system = System(scheme,**system_kwargs)
             system.species[dose_spname].y0 = doses
             if k_changes is not None:
                 for k_name, k_val in k_changes.items():
@@ -1419,13 +1419,13 @@ class Experiments:
         return fit_output
 
     @staticmethod
-    def dose_response(dose_arr: np.ndarray, t_end: float, scheme: Union[dict,NState], dose_spname: str = "I", CO_spname: str = "EI", E_spname: str = "E", response_sp: list = None, k_changes: dict = None, system_kwargs: dict = None, sim_kwargs: dict = None) -> tuple[NState, np.ndarray]:
+    def dose_response(dose_arr: np.ndarray, t_end: float, scheme: Union[dict,System], dose_spname: str = "I", CO_spname: str = "EI", E_spname: str = "E", response_sp: list = None, k_changes: dict = None, system_kwargs: dict = None, sim_kwargs: dict = None) -> tuple[System, np.ndarray]:
         """
         A macro for doing timecourses with variable [I] and returning a fractional response curve.
 
         Returns
         -------
-        NState
+        System
             The system object.
         np.ndarray
             The response normalized to the total enzyme.
@@ -1452,11 +1452,11 @@ class Experiments:
                 "quiet": True,
             }
             system_kwargs = update_dict(default_system_kwargs, system_kwargs)
-            system = NState(scheme,**system_kwargs)
-        elif isinstance(scheme, NState):
+            system = System(scheme,**system_kwargs)
+        elif isinstance(scheme, System):
             system = scheme
         else:
-            raise ValueError("scheme must be a dict or NState object.")
+            raise ValueError("scheme must be a dict or System object.")
 
         default_sim_kwargs = {
             "t_span": (0, t_end),

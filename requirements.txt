@@ -1,6 +1,0 @@
-matplotlib>=3.8
-numpy>=1.26
-scipy>=1.13
-setuptools>=67.8
-sympy>=1.12
-lmfit>=1.3

@@ -15,5 +15,8 @@ find . -name '*.egg-info' -exec rm -rf {} +
 # build
 python -m build
 
+# update packaging to fix error
+# pip install -U packaging
+
 # upload
 # twine upload dist/*

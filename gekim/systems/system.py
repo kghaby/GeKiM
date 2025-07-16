@@ -1,237 +1,26 @@
 import numpy as np
-import re
-from copy import deepcopy
-from sympy import symbols
 from collections import defaultdict
-from typing import Union
-from ..utils.helpers import integerable_float
-from ..utils.logging import Logger
-#TODO: dataclasses for species transitions and paths 
+from sympy import Symbol
+from typing import Optional, Union
 
-#TODO: ISSUE: deepcopy(NState) does not work properly. Even on a presimulated system, the copied one requires simulator to be reset. 
-#       simin attribute of NState is not recognized even though NState.simin returns the simin.
-#       is this bc of weakref? 
-#TODO: add_transition with arrow interpretation
-#TODO: get_steady_state which uses the linear method if all transitions are linear (kinetics6 and 5)
-#       automatically uses ODESolver if simulator is not specified
-#TODO: allow a blank system to be made with just the structure. Uses symbols for species and transitions that dont have values 
-            
-class Species:
-    def __init__(self, name: str, y0: Union[np.ndarray,float], label=None, color=None, combination_rule='elementwise'):
-        """
-        Initialize a species object.
-
-        Parameters
-        ----------
-        name : str
-            Name of the species.
-        y0 : Union[np.ndarray,float]
-            Initial concentration of the species.
-            Array Example: `{"Ligand":np.linspace(1,1500,100)}` for a Michaelis-Menten ligand concentration scan.
-        label : str, optional
-            Useful for plotting. Will default to NAME.
-        color : str, optional
-            Useful for plotting. Best added by ..utils.Plotting.assign_colors_to_species().
-        combination_rule : str, optional
-            Determines how y0 values should be combined with others. Only relevant if the y0 is an array.
-            'elementwise' means values will be combined elementwise with other species.
-            'product' means the Cartesian product of y0 values will be taken with other species' y0 values.
-
-
-        """
-        self.name = name
-        self.y0 = np.array([y0]) if np.isscalar(y0) else np.array(y0)
-        self.label = label or name
-        self.index = None  # added by NState
-        self.color = color
-        self.sym = symbols(name)
-        self.simin = None  # added by simulator
-        self.simout = None  # added by simulator
-        self.combination_rule = combination_rule
-
-    def __repr__(self):
-        return f"{self.name} (Initial Concentration: {self.y0}, Label: {self.label})"
-
-class Transition:
-    def __init__(self, name: str, k, source: list, target: list, label=None, index=None):
-        """
-        Parameters
-        ----------
-        name : str
-            Name of the rate constant.
-        k : float
-            Value of the rate constant.
-        source : list
-            List of (SPECIES, COEFF) tuples or "{COEFF}{SPECIES}" strings.
-        target : list
-            List of (SPECIES, COEFF) tuples or "{COEFF}{SPECIES}" strings.
-        label : str, optional
-            Could be useful for plotting. Will default to NAME.
-        """
-        self.name = name # should be the name of the rate constant for all intents and purposes, eg "kon"
-        self.k = k
-        self.source = Transition._format_state(source,"source")  # List of (SPECIES, COEFF) tuples or "{COEFF}{SPECIES}" strings
-        self.target = Transition._format_state(target,"target")  # List of (SPECIES, COEFF) tuples or "{COEFF}{SPECIES}" strings
-        self.label = label or name
-        self.index = index
-        self.sym = symbols(name)
-        self.simin = None # added by simulator
-        self.simout = None # added by simulator
-        self.linear = self.is_linear()
-        
-
-    def __repr__(self):
-        source_str = ' + '.join([f"{coeff}*{sp}" for sp, coeff in self.source])
-        target_str = ' + '.join([f"{coeff}*{sp}" for sp, coeff in self.target])
-        return f"{self.name} ({self.k}): {source_str} -> {target_str}"
-
-    def is_linear(self):
-        """
-        Check if a transition is linear.
-
-        Returns
-        -------
-        bool
-            True if the transition is linear, False otherwise.
-
-        Notes
-        -----
-        A first-order reaction must have exactly one source species (with a stoichiometric coefficient of 1).
-        """
-        return len(self.source) == 1 and self.source[0][1] == 1
-
-    @staticmethod
-    def _parse_species_string(species_str):
-        """
-        Extract coefficient and species name from species string.
-
-        Parameters
-        ----------
-        species_str : str
-            A species string, e.g., '2A'.
-
-        Returns
-        -------
-        tuple
-            A tuple of species name (str) and stoichiometric coefficient (int).
-        """
-        match = re.match(r"(-?\d*\.?\d*)(\D.*)", species_str)
-        if match and match.groups()[0]:
-            coeff = match.groups()[0]
-            if coeff == '-':
-                coeff = -1
-            coeff = integerable_float(float(coeff))
-        else:
-            coeff = 1
-        name = match.groups()[1] if match else species_str
-        return name,coeff
-
-    @staticmethod            
-    def _format_state(state: list, direction=None):
-        """
-        Format a transition by extracting and combining coefficients and species names.
-        Is idempotent.
-
-        Parameters
-        ----------
-        state : list
-            State descriptor. List of (SPECIES, COEFF) tuples or "{COEFF}{SPECIES}" strings.
-        direction : str, optional
-            Direction of the transition. Default is None. Can be "source" or "target".
-
-        Returns
-        -------
-        list
-            List of (SPECIES, COEFF) tuples.
-
-        Raises
-        ------
-        ValueError
-            If the transition or species tuples are invalid.
-        """
-        parsed_species = {}
-        state = state if isinstance(state, list) else [state]
-        for sp in state:
-            if isinstance(sp, str):
-                name, coeff = Transition._parse_species_string(sp)
-            elif isinstance(sp, tuple):
-                if len(sp) == 2:
-                    if isinstance(sp[0], str) and isinstance(sp[1], (int, float)):
-                        name, coeff = sp
-                    elif isinstance(sp[1], str) and isinstance(sp[2], (int, float)):
-                        coeff, name = sp
-                    else:
-                        raise ValueError(f"Invalid species tuple '{sp}' in transition '{state}'.")
-                else:
-                    raise ValueError(f"Invalid species tuple '{sp}' in transition '{state}'.")
-            else:
-                raise ValueError(f"Invalid species '{sp}' in transition '{state}'.")
-            if direction == "source" and coeff < 0:
-                raise ValueError(f"Negative coefficient '{coeff}' in source of transition '{state}'.")
-            if name in parsed_species:
-                parsed_species[name] += coeff # combine coeffs
-            else:
-                parsed_species[name] = coeff
-        state = [(name, coeff) for name, coeff in parsed_species.items()]
-        return state
-    
-class Path:
-    """
-    Represents a path in a network of species transitions. 
-    Is created by `NState.find_paths()`
-
-    Attributes
-    ----------
-    species_path : list
-        List of species objects representing the path.
-    transitions_path : list
-        List of transition objects representing the transitions along the path.
-    probability : float
-        Probability of the path relative to other paths from `species[0]` to `species[-1]`
-    length : int
-        Length of species_path.
-
-    Methods
-    -------
-    __repr__()
-        Returns a string representation of the species path.
-
-    """
-
-    def __init__(self, species_path, transitions_path, probability):
-        self.species_path = species_path
-        self.transitions_path = transitions_path
-        self.probability = probability
-        self.length = len(species_path)
-
-    def __repr__(self):
-        """
-        Returns a string representation of the Path object.
-
-        Returns
-        -------
-        str
-            String representation of the Path object.
-
-        """
-        path_str = ' -> '.join(['+'.join([sp.name for sp in group]) if isinstance(group, list) else group.name for group in self.species_path])
-        prob_fmt = "{:.2e}".format(self.probability)
-        return f"Path(Length: {str(self.length).rjust(3)},\tProbability: {prob_fmt},\t{path_str})"
+from gekim.utils.logging import Logger
+from gekim.schemes.scheme import Scheme
+from gekim.schemes.species import Species
+from gekim.schemes.transition import Transition
+from gekim.systems.path import Path
 
 class System:
-    #TODO: add/remove_species and add/remove_transition methods
-    #TODO: reinits if species or transitions are modified. let user able to define custom rate law funcs 
-    #TODO: markovian, nonmarkovian, etc
-    #TODO: add a function for fetching info. say get_simout("species_name")
-
-    
-    def __init__(self, config: dict, logfilename=None, quiet=False):
+    """
+    Core System class that binds a scheme (model structure) with a Simulator for execution.
+    Provides methods to simulate and analyze the system.
+    """
+    def __init__(self, scheme: Union[dict, Scheme] = None, logfilename: Optional[str] = None, quiet: bool = False):
         """
-        Initialize the NState class with configuration data. Can be any degree of nonlinearity.
+        Initialize the System class with configuration data. Can be any degree of nonlinearity.
 
         Parameters
         ----------
-        config : dict
+        scheme : dict
             Configuration containing species and transitions.
             Species should contain name, initial concentration, and label.
             Transitions should contain name, source-species, target-species, and k value.
@@ -245,81 +34,146 @@ class System:
         ValueError
             If config is invalid.
         """
-        self._quiet = quiet
         self.log = Logger(quiet=quiet, logfilename=logfilename)
-
-        self._validate_config(config)
-        self.config = deepcopy(config)
-    
-        self.species = {
-            name: Species(
-                name=name,
-                y0=np.array([data["y0"]]) if np.isscalar(data["y0"]) else np.array(data["y0"]),
-                label=data.get('label', name),
-                color=data.get('color')
-            ) for name, data in config['species'].items()
-        }
-
-        self.transitions = {
-            name: Transition(
-                name=name,
-                k=data['k'],
-                source=data['source'],
-                target=data['target'],
-                label=data.get('label', name)
-            ) for name, data in config['transitions'].items()
-        }
-
-        self.setup()
+        self._quiet = quiet # set quiet without triggering setter
+        
+        self.scheme = scheme # invoke setter to validate and set scheme
+        
         self.simulator = None
-        self.paths = None
-        self.log.info(f"NState system initialized successfully.\n")
+        self.log.info(f"System initialized successfully.")
+        self.log.info("="*80)
 
     @property
-    def quiet(self):
+    def quiet(self) -> bool:
         return self._quiet
 
     @quiet.setter
-    def quiet(self, value):
+    def quiet(self, value: bool):
         self._quiet = value
         self.log.quiet = value
-
-    def setup(self):
-        """
-        Reinitialize the system after adding transitions or species.
-        This method should be called if you modify the scheme after initialization.
-        WARNING: This will reinitialize everything except the logger and config.
-        """
-        #TODO: this needs testing. Make sure that its fine to not reinit the concentrations
-        # Document the order of the species
-        for idx, name in enumerate(self.species):
-            self.species[name].index = idx
-        self._validate_species()
-            
-        # Document the order of the transitions
-        for idx, name in enumerate(self.transitions):
-            self.transitions[name].index = idx
-
-        return
-
-    def _validate_config(self,config):
-        if not 'species' in config or not 'transitions' in config:
-            raise ValueError("Config must contain 'species' and 'transitions' keys.")
-        return True
-
-    def _validate_species(self):
-        #TODO: use assign color 
-        labels = set()
-        for name, data in self.species.items():
-            # Validate labels
-            label = data.label
-            if label in labels:
-                self.log.error(f"Duplicate label '{label}' found for species '{name}'.")
-                return False
-            labels.add(label)
-        return True
+        
+    @property
+    def scheme(self) -> Scheme:
+        return self._scheme
     
-    def simulate(self, simulator=None, *args, **kwargs):
+    @scheme.setter
+    def scheme(self, config: Union[dict, Scheme, None]):
+        if config is None:
+            self._scheme = Scheme()
+            self.log.info("Initialized empty Scheme.\n")
+        elif isinstance(config, dict):
+            self._scheme = Scheme(config)
+            self.log.info("Initialized Scheme from dict.\n")
+        elif isinstance(config, Scheme):
+            self._scheme = config
+            self.log.info("Scheme object already initialized.\n")
+        else:
+            raise TypeError("scheme must be None, dict, or Scheme")
+        
+        # side‑effects on swap:
+        self._reset_simulator()
+
+    @property
+    def species(self) -> dict[str, Species]:
+        return self.scheme.species
+
+    @property
+    def transitions(self) -> dict[str, Transition]:
+        return self.scheme.transitions
+    
+    @property
+    def simin(self):
+        if self.simulator and self.simulator.simin:
+            return self.simulator.simin
+        else:
+            self.log.error(f"Simulator not set or simin not initialized. "
+                           f"Use System.set_simulator() to set a simulator.")
+        return {}
+
+    @property
+    def simout(self):
+        if self.simulator and self.simulator.simout:
+            return self.simulator.simout
+        else:
+            self.log.error(f"Simulator not set or simout not initialized. "
+                           f"Use System.set_simulator() to set a simulator.")
+        return {}
+
+    def set_scheme(self, scheme: Union[dict, Scheme], name: Optional[str] = None,
+                   color_kwargs: Optional[dict] = None) -> Scheme:
+        """
+        Sets the scheme for the system. 
+
+        Parameters
+        ----------
+        scheme : dict or Scheme
+        
+        name : str, optional
+        
+        color_kwargs : dict, optional
+            Keyword arguments for color assignment to species
+            See `gekim.utils.plotting.assign_colors_to_species()` for details.
+
+        Returns
+        -------
+        The scheme instance (which is now an attribute of the system).
+        """
+        if isinstance(scheme, dict):
+            scheme = Scheme(scheme, name=name, color_kwargs=color_kwargs)
+            self.log.info("Initialized Scheme from dict.")
+        self.scheme = scheme
+        self.log.info(f"Scheme set successfully.")
+        self.log.info(self.scheme)
+        self.log.info("="*80)
+        return self.scheme
+
+    def set_simulator(self, simulator_class, *args, **kwargs):
+        """
+        Sets and initializes the simulator for the system. 
+
+        Parameters
+        ----------
+        simulator : class
+            The simulator class to use for the system. Unless using a custom simulator, 
+            use the provided simulators in gekim.simulators.
+        *args : tuple, optional
+            Additional arguments to pass to the simulator for initialization.
+        **kwargs : dict, optional
+            Additional keyword arguments to pass to the simulator for initialization.
+        
+        Returns
+        -------
+        The simulator instance (which is now an attribute of the system).
+
+        Notes
+        ----- 
+        Alternatively, you can set the simulator directly as an attribute of the system:
+        ```python
+        system.simulator = simulator(system)
+        system.simulator.simulate(...)
+        ```
+        This method may be more IDE-friendly.
+        """
+        self.simulator = simulator_class(self, *args, **kwargs)
+        self.log.info(f"Simulator set to {simulator_class.__name__}.")
+        self.log.info("Use System.simulate() to run the simulation.")
+        self.log.info("="*80)
+        return self.simulator
+    
+    def _reset_simulator(self):
+        """
+        Reset the simulator and simulation output.
+        This is called when the scheme is changed.
+        
+        Notes
+        -----
+        This method does not reinit the simulator (in case arguments are needed)!
+        """
+        self.simulator = None
+        self.log.info("Simulator and simulation output reset.\n")
+        
+
+    def simulate(self, simulator_class=None, *args, **kwargs):
         """
         Simulate the system using the provided simulator.
 
@@ -335,11 +189,11 @@ class System:
         
         Returns
         -------
-        Returns NState if the simulator didn't return anything, else returns the output of the simulator.
+        Returns System if the simulator didn't return anything, else returns the output of the simulator.
 
         Notes
         -----
-        The simulator is forced to ONLY take NState (self) as an argument for initialization. 
+        The simulator is forced to ONLY take System (self) as an argument for initialization. 
         If the simulator requires additional arguments, initialize the simulator in an extra step, like so:
         ```python
         system.simulator = simulator(system, *args, **kwargs)
@@ -353,48 +207,44 @@ class System:
         system.simulator.simulate(*args, **kwargs)
         ```
         """
-        if not simulator:
+        if not simulator_class:
             if not self.simulator:
-                self.log.error("Simulator not set. Use as an argument in NState.simulate() or set an initialized simulator to NState.simulator")
-                return 
+                self.log.error("Simulator not set. Use as an argument in System.simulate() or set an initialized simulator to System.simulator")
+                return
             else:
                 simout = self.simulator.simulate(*args, **kwargs)
                 if simout:
                     return simout
         else:
-            self.log.info(f"Simulating with {simulator.__name__}.\n")
-            simulator = simulator(self)
-            simout = simulator.simulate(*args, **kwargs)
+            self.log.info(f"Simulating with {simulator_class.__name__}.\n")
+            simulator_class = simulator_class(self)
+            simout = simulator_class.simulate(*args, **kwargs)
             if simout:
                 return simout
         return self
 
-    def set_simulator(self, simulator, *args, **kwargs) -> None:
+    def set_parameter(self, param: Union[str, Symbol], value: float):
         """
-        Sets and initializes the simulator for the system. 
-
-        Parameters
-        ----------
-        simulator : class
-            The simulator class to use for the system. Unless using a custom simulator, 
-            use the provided simulators in gekim.simulators.
-        *args : tuple, optional
-            Additional arguments to pass to the simulator for initialization.
-        **kwargs : dict, optional
-            Additional keyword arguments to pass to the simulator for initialization.
-
-        Notes
-        -----
-        This method is not as good as just doing:
-        ```python
-        system.simulator = simulator(system)
-        system.simulator.simulate(...)
-        ```
-        because IDE syntax and doc helpers may not pick up the new simulator attribute and simulate method.
+        Assign a numeric value to a model parameter (rate constant or symbolic initial concentration).
+        `param` can be the parameter name or the sympy Symbol object.
         """
-        self.simulator = simulator(self, *args, **kwargs)
-        self.log.info(f"Simulator set to {simulator.__name__}.\n")
-        self.log.info(f"Use system.simulator.simulate() or system.simulate() to run the simulation.\n")
+        if isinstance(param, str):
+            if param in self.scheme.param_symbols:
+                sym = self.scheme.param_symbols[param]
+            else:
+                raise KeyError(f"Parameter '{param}' not found in scheme.")
+        else:
+            sym = param
+            # Verify symbol is recognized
+            found = False
+            for name, sym_obj in self.scheme.param_symbols.items():
+                if sym_obj == sym:
+                    found = True
+                    break
+            if not found:
+                raise KeyError(f"Parameter symbol '{sym}' is not part of the scheme.")
+        # Set numeric value
+        self.scheme.param_values[sym] = value
 
     def sum_species_simout(self,whitelist:list=None,blacklist:list=None):
         """
@@ -464,7 +314,7 @@ class System:
             else:
                 total_y += self.species[name].simout["y"]
         return total_y
-
+    
     def mat2sp_simout(self,matrix,key_name="y"):
         """
         Save species vectors from a concentration matrix to the respective 
@@ -485,9 +335,10 @@ class System:
         for _, sp_data in self.species.items():
             sp_data.simout[key_name] = matrix[sp_data.index]
         return
-
-    def find_paths(self, start_species: Union[str,Species], end_species: Union[str,Species], only_linear_paths=True, 
-                   prob_cutoff=1e-10, max_depth=20, log_paths=False, normalize_prob=True):
+    
+    def find_paths(self, start_species: Union[str,Species], end_species: Union[str,Species], 
+                   only_linear_paths=True, prob_cutoff=1e-10, max_depth=20, 
+                   log_paths=False, normalize_prob=True):
         """
         Find paths from start_species to end_species.
 
@@ -558,7 +409,7 @@ class System:
                 all_linear_tr = False
                 self.log.warning(f"Transition '{transition.name}' is not linear!")
         if not all_linear_tr:
-            self.log.error("This method only uses TRANSITION.k to calculate probabilities, and expects single TRANSITION.source to contain only one species.\n" +
+            self.log.error("This method only uses TRANSITION.k to calculate probabilities, and expects TRANSITION.source to contain only one species.\n" +
                            "If possible, make all transitions linear (e.g., with a pseudo-first-order approximation).\n")
 
         if isinstance(start_species, str):
@@ -602,13 +453,16 @@ class System:
     def get_species_sets(self) -> dict:
         """
         Combine the probabilities of self.paths that contain the same set of species.
-        Essentially a utility function if `NState.find_paths()` yields a ton of paths.
+        Essentially a utility function if `System.find_paths()` yields a ton of paths.
 
         Returns
         -------
         dict
             Dictionary with species sets as keys and combined probabilities as values.
         """
+        if not hasattr(self, 'paths') or not self.paths:
+            self.log.error("No paths found. Run System.find_paths() first.")
+            return {}
         paths = self.paths
         combined_paths = defaultdict(lambda: {"combined_probability": 0.0})
 

@@ -17,7 +17,7 @@ class Logger:
         self._log(f"{datetime.now()} -- Logging started", "INFO")
 
     def _log(self, log_message, level):
-        if not (self.quiet or level == "WARNING") and level != "ERROR":
+        if (not self.quiet or level == "WARNING") and level != "ERROR":
             print(log_message)  # end='' to avoid double newlines
         if self.file_handle:
             try:

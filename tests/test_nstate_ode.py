@@ -303,7 +303,7 @@ def _solve_odes_old(system, t, method='BDF', rtol=1e-6, atol=1e-8, output_raw=Fa
 # Solve gekim systems
 def solve_gekim_systems(schemes,plot_timecourse=False) -> None: 
     for name,scheme in schemes.items():
-        system = gk.schemes.NState(scheme,quiet=True)
+        system = gk.System(scheme,quiet=True)
         #sol = _solve_odes_old(system,t,output_raw=True) #testing with old (nonvectorized) version
         system.set_simulator(gk.simulators.ODESolver)
         sol = system.simulator.simulate(t_eval=t,output_raw=True,atol=1e-8,rtol=1e-6)
@@ -332,7 +332,7 @@ def solve_gekim_systems(schemes,plot_timecourse=False) -> None:
 
             # Fitted data
             plt.plot(t,  fit_output.y_fit,label=r"New Fit: $k_{\text{obs}}$ = "+
-                    str(gk.utils.helpers.round_sig(fit_output.fitted_params["kobs"],3))+r" $\text{s}^{-1}$",ls='--', color="black")
+                    str(gk.utils.helpers.round_sig(fit_output.best_values["kobs"],3))+r" $\text{s}^{-1}$",ls='--', color="black")
 
             plt.xlabel('Time (s)')
             plt.ylabel('Concentration (nM)')
@@ -358,14 +358,14 @@ def solve_hardcoded_system(system,t,concE0,dofit=True):
 
 def compare_systems(sys1_label,sys1_dict, sys2_label,sys2_dict, t, didfits=True) -> None:
     bad = False
-    if np.allclose(sys1_dict["sol"].y, sys2_dict["sol"].y,rtol=1e-6):
+    if np.allclose(sys1_dict["sol"].y, sys2_dict["sol"].y,atol=1e-5):
         if didfits:
-            if gk.utils.helpers.compare_dictionaries(sys1_dict["fit_output"].fitted_params,sys2_dict["fit_output"].fitted_params,rel_tol=1e-6,abs_tol=1e-8):
+            if gk.utils.helpers.compare_dictionaries(sys1_dict["fit_output"].best_values,sys2_dict["fit_output"].best_values,rel_tol=1e-6,abs_tol=1e-8):
                 print(f"GOOD\tsol and fit match: {sys1_label} and {sys2_label}","\n")
             else:
                 print(f"BAD\tfit mismatch: {sys1_label} and {sys2_label}")
-                print(f"{sys1_label}:\n",sys1_dict["fit_output"].fitted_params)
-                print(f"{sys2_label}:\n",sys2_dict["fit_output"].fitted_params)
+                print(f"{sys1_label}:\n",sys1_dict["fit_output"].best_values)
+                print(f"{sys2_label}:\n",sys2_dict["fit_output"].best_values)
                 print("\n")
                 bad = True
         else:

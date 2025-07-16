@@ -1,12 +1,8 @@
 import numpy as np
 from scipy.integrate import solve_ivp
 from sympy import symbols, Matrix, prod, pretty, zeros, lambdify
-from .base_simulator import BaseSimulator
 
-# TODO: a lot of stuff like lmfit minimizer. probably for the base class. 
-#   for example, progress bar. 
-# TODO: do a Simulator class that takes a method option and then points to classes like ODESolver, Gillespie, etc.? 
-#   The NState system would be like the model function in a lmfit minimizer.
+from gekim.simulators.base import BaseSimulator
 
 class ODESolver(BaseSimulator):
     """
@@ -23,7 +19,7 @@ class ODESolver(BaseSimulator):
     Use as a simulator for NState class. Will generate and solve systems deterministically.
 
     During initialization, the following keys (and values) are added to the 
-    `self.system.simin` dict:
+    `self.simin` dict:
 
         unit_sp_mat : np.ndarray
             Unit species matrix.
@@ -58,7 +54,7 @@ class ODESolver(BaseSimulator):
         # Rate laws 
         self._generate_rates_sym() 
         self.log_rates()
-        #self.lambdify_sym_rates() # Overwrites self._rates_func with a lambdified version of self.system.simin["rates_sym"]
+        #self.lambdify_sym_rates() # Overwrites self._rates_func with a lambdified version of self.simin["rates_sym"]
 
         # Jacobian
         self._generate_jac() 
@@ -78,11 +74,11 @@ class ODESolver(BaseSimulator):
         Notes
         -----
         Generates 
-        - unit species matrix (`self.system.simin["unit_sp_mat"]`), 
-        - stoichiometry matrix (`self.system.simin["stoich_mat"]`), 
-        - stoichiometry reactant matrix (`self.system.simin["stoich_reactant_mat"]`), and 
-        - rate constant vector (`self.system.simin["k_vec"]`) 
-            and diagonal matrix (`self.system.simin["k_diag"]`).
+        - unit species matrix (`self.simin["unit_sp_mat"]`), 
+        - stoichiometry matrix (`self.simin["stoich_mat"]`), 
+        - stoichiometry reactant matrix (`self.simin["stoich_reactant_mat"]`), and 
+        - rate constant vector (`self.simin["k_vec"]`) 
+            and diagonal matrix (`self.simin["k_diag"]`).
 
         Rows are transitions, columns are species.
 
@@ -91,25 +87,25 @@ class ODESolver(BaseSimulator):
 
         n_species = len(self.system.species)
         n_transitions = len(self.system.transitions)
-        self.system.simin["unit_sp_mat"] = np.eye(n_species, dtype=int)
+        self.simin["unit_sp_mat"] = np.eye(n_species, dtype=int)
 
         # Initialize matrices
-        self.system.simin["stoich_reactant_mat"] = np.zeros((n_transitions, n_species))
-        self.system.simin["stoich_mat"] = np.zeros((n_transitions, n_species))
-        self.system.simin["k_vec"] = np.zeros(n_transitions)
+        self.simin["stoich_reactant_mat"] = np.zeros((n_transitions, n_species))
+        self.simin["stoich_mat"] = np.zeros((n_transitions, n_species))
+        self.simin["k_vec"] = np.zeros(n_transitions)
 
         # Fill stoich matrices and k vector
         for tr_name, tr in self.system.transitions.items():
             tr_idx = tr.index
-            self.system.simin["k_vec"][tr_idx] = tr.k
-            reactant_vec = np.sum([self.system.simin["unit_sp_mat"][self.system.species[name].index] * coeff for name, coeff in tr.source],axis=0)
-            product_vec = np.sum([self.system.simin["unit_sp_mat"][self.system.species[name].index] * coeff for name, coeff in tr.target],axis=0)
+            self.simin["k_vec"][tr_idx] = tr.k
+            reactant_vec = np.sum([self.simin["unit_sp_mat"][self.system.species[name].index] * coeff for name, coeff in tr.source],axis=0)
+            product_vec = np.sum([self.simin["unit_sp_mat"][self.system.species[name].index] * coeff for name, coeff in tr.target],axis=0)
             
-            self.system.simin["stoich_reactant_mat"][tr_idx, :] = reactant_vec  
+            self.simin["stoich_reactant_mat"][tr_idx, :] = reactant_vec  
             #self._stoich_product_mat[tr_idx, :] = product_vec   # not used
-            self.system.simin["stoich_mat"][tr_idx] = product_vec - reactant_vec
+            self.simin["stoich_mat"][tr_idx] = product_vec - reactant_vec
 
-        self.system.simin["k_diag"] = np.diag(self.system.simin["k_vec"])
+        self.simin["k_diag"] = np.diag(self.simin["k_vec"])
         return
     
     def _rates_func(self, t, conc):
@@ -122,8 +118,8 @@ class ODESolver(BaseSimulator):
         But most of these can be baked in on the schematic level I think. 
         """
         #TODO: Use higher dimensionality conc arrays to process multiple input concs at once? 
-        C_Nr = np.prod(np.power(conc, self.system.simin["stoich_reactant_mat"]), axis=1) # state dependencies
-        N_K = np.dot(self.system.simin["k_diag"],self.system.simin["stoich_mat"]) # interactions
+        C_Nr = np.prod(np.power(conc, self.simin["stoich_reactant_mat"]), axis=1) # state dependencies
+        N_K = np.dot(self.simin["k_diag"],self.simin["stoich_mat"]) # interactions
         self.current_gradient = np.dot(C_Nr,N_K)
         return self.current_gradient
     
@@ -140,22 +136,22 @@ class ODESolver(BaseSimulator):
         # Generate rate's with symbolic species and rate constants 
         rates_sym = Matrix([0] * len(self.system.species))
         for tr_name, tr in self.system.transitions.items():
-            unscaled_rate = self.system.transitions[tr_name].sym * prod(self.system.species[sp_name].sym**coeff for sp_name, coeff in tr.source)
+            unscaled_rate = tr.sym * prod(self.system.species[sp_name].sym**coeff for sp_name, coeff in tr.source)
             for sp_name, coeff in tr.source:
                 rates_sym[self.system.species[sp_name].index] -= coeff * unscaled_rate
             for sp_name, coeff in tr.target:
                 rates_sym[self.system.species[sp_name].index] += coeff * unscaled_rate
-        self.system.simin["rates_sym"] = rates_sym 
-        self.system.log.info("Saved rates_sym and rates_numk into system simin dict (SYSTEM.simin).")
+        self.simin["rates_sym"] = rates_sym 
+        self.system.log.info("Saved rates_sym and rates_numk into system simin dict (simin).")
 
         # Substitute rate constant symbols for values 
         tr_sym2num = {symbols(name): tr.k for name, tr in self.system.transitions.items()}
-        self.system.simin["rates_numk"] = self.system.simin["rates_sym"].subs(tr_sym2num)
+        self.simin["rates_numk"] = self.simin["rates_sym"].subs(tr_sym2num)
 
         # Assign each rate law to the respective species
         for sp_name, sp_data in self.system.species.items():
-            sp_data.simin["rate_sym"] = self.system.simin["rates_sym"][sp_data.index]
-            sp_data.simin["rate_numk"] = self.system.simin["rates_numk"][sp_data.index]
+            sp_data.simin["rate_sym"] = self.simin["rates_sym"][sp_data.index]
+            sp_data.simin["rate_numk"] = self.simin["rates_numk"][sp_data.index]
         self.system.log.info("Saved rate_sym and rate_numk into species simin dict (SYSTEM.species[NAME].simin).")
 
         return 
@@ -171,9 +167,9 @@ class ODESolver(BaseSimulator):
         Can be used to simulate with custom symbolic rate funcs for each species instead of all following the same ODE paradigm.
         """
         #TODO: test custom funcs and refactor as needed to make sure its easier and more robust to use (ie make sure the appropriate setup steps are reran
-        # currently uses the system.simin, not species specific. would need to remake system.simin, or alter rate func at the generate_rates_sym step
+        # currently uses the simin, not species specific. would need to remake simin, or alter rate func at the generate_rates_sym step
         species_vec = Matrix([self.system.species[sp_name].sym for sp_name in self.system.species])
-        rates_func = lambdify(species_vec, self.system.simin["rates_numk"], 'numpy')
+        rates_func = lambdify(species_vec, self.simin["rates_numk"], 'numpy')
         self._rates_func = lambda t, y: rates_func(*y).flatten()
 
         # Re-generate the Jacobian matrix in case this function is called after the Jacobian has been generated, like for custom functions
@@ -236,9 +232,9 @@ class ODESolver(BaseSimulator):
         Notes
         -----
         Generates
-         - the Jacobian matrix with symbolic species and rate constants (self.system.simin["J_sym"])
-         - the Jacobian matrix with symbolic species and numerical rate constants (self.system.simin["J_symsp_numtr"])
-         - a wrapped numerical Jacobian function (self.system.simin["J_func_wrap"]) that accepts t,y as arguments
+         - the Jacobian matrix with symbolic species and rate constants (self.simin["J_sym"])
+         - the Jacobian matrix with symbolic species and numerical rate constants (self.simin["J_symsp_numtr"])
+         - a wrapped numerical Jacobian function (self.simin["J_func_wrap"]) that accepts t,y as arguments
 
         The wrapped numerical function is time-independent even though it accepts t as an argument!
 
@@ -249,12 +245,12 @@ class ODESolver(BaseSimulator):
         species_vec = Matrix([self.system.species[sp_name].sym for sp_name in self.system.species])
 
         # Symbolic Jacobian
-        self.system.simin["J_sym"] = self.system.simin["rates_sym"].jacobian(species_vec)
+        self.simin["J_sym"] = self.simin["rates_sym"].jacobian(species_vec)
 
         # Numerical Jacobian
-        self.system.simin["J_symsp_numtr"] = self.system.simin["rates_numk"].jacobian(species_vec) # Symbolic species, numeric transition rate constants
-        J_func = lambdify(species_vec, self.system.simin["J_symsp_numtr"], 'numpy') # Make numerical function
-        self.system.simin["J_func_wrap"] = lambda t, y: J_func(*y) # Wrap J_func so that t,y is passed to the function to be compatible with solve_ivp
+        self.simin["J_symsp_numtr"] = self.simin["rates_numk"].jacobian(species_vec) # Symbolic species, numeric transition rate constants
+        J_func = lambdify(species_vec, self.simin["J_symsp_numtr"], 'numpy') # Make numerical function
+        self.simin["J_func_wrap"] = lambda t, y: J_func(*y) # Wrap J_func so that t,y is passed to the function to be compatible with solve_ivp
         return
       
     def log_jac(self,force_print=False):
@@ -263,14 +259,14 @@ class ODESolver(BaseSimulator):
 
         Notes
         -----
-        The logged Jacobian includes row and column labels, but `SYSTEM.simin["J_sym"]` does not.
+        The logged Jacobian includes row and column labels, but `simin["J_sym"]` does not.
 
         The Jacobian matrix here represents the first-order partial derivatives of the rate of 
             change equations for each species with respect to all other species in the system.
         """
         n_species = len(self.system.species)
         J_log = zeros(n_species + 1, n_species + 1)
-        J_log[1:, 1:] = self.system.simin["J_sym"]
+        J_log[1:, 1:] = self.simin["J_sym"]
 
         for sp_name,sp_data in self.system.species.items():
             J_log[0, sp_data.index+1] = symbols(sp_name)
@@ -306,16 +302,16 @@ class ODESolver(BaseSimulator):
             If atol == 0, atol = 1e-6 * <the smallest nonzero value of y0>.
                 Dynamically chosen per y0.
         dense_output : bool, optional
-            If True, save a `scipy.integrate._ivp.common.OdeSolution` instance to `SYSTEM.simout.soln_continuous(t)`.
+            If True, save a `scipy.integrate._ivp.common.OdeSolution` instance to `simout.soln_continuous(t)`.
             If using multiple y0's, this will be a list of instances that share indexing with the other outputs,
-            and can be called like `SYSTEM.simout['soln_continuous'][idx](t)`.
-            Access a specific species conc like `SYSTEM.simout['soln_continuous'](t)[SYSTEM.species[NAME].index]`.
+            and can be called like `simout['soln_continuous'][idx](t)`.
+            Access a specific species conc like `simout['soln_continuous'](t)[SYSTEM.species[NAME].index]`.
         **kwargs : dict, optional
             Additional keyword arguments to pass to the solver.
 
         Notes
         -----
-        Saves the following keys to `SYSTEM.simout`:
+        Saves the following keys to `simout`:
         - t : np.ndarray
             Time points
         - soln_continuous : scipy.integrate._ivp.common.OdeSolution or list of scipy.integrate._ivp.common.OdeSolution
@@ -364,15 +360,14 @@ class ODESolver(BaseSimulator):
                 
             if input_t_span is None:
                 if input_t_eval is None:
-                    J0 = self.system.simin["J_func_wrap"](None, y0)
+                    J0 = self.simin["J_func_wrap"](None, y0)
                     t_span = self.estimate_t_span(J0,self.max_order)
-                    self.system.log.info(f"\t(Over)estimated time scale: {t_span[1]:.2e} (1/<rate constant units>)"
-                                         f"\tAdding an event for gradient convergence.")
+                    self.system.log.info(f"\tEstimated time scale: {t_span[1]:.2e} (1/<rate constant units>)")
                 else:
                     t_span = (t_eval[0], t_eval[-1])
 
             soln = solve_ivp(self._rates_func, t_span=t_span, y0=y0, method=method, t_eval=t_eval, 
-                                rtol=rtol, atol=atol, jac=self.system.simin["J_func_wrap"], dense_output=dense_output, **kwargs) 
+                                rtol=rtol, atol=atol, jac=self.simin["J_func_wrap"], dense_output=dense_output, **kwargs) 
                 # vectorized=True makes legacy rate func slower bc low len(y0) I think
             if not soln.success:
                 raise RuntimeError("FAILED: " + soln.message)
@@ -436,30 +431,30 @@ class ODESolver(BaseSimulator):
     
     def _process_simouts(self, raw_simouts: list, y0_mat_len: int, dense_output=False):
         if y0_mat_len == 1:
-            self.system.simout["t"] = raw_simouts[0].t
-            self.system.log.info(f"\tTime saved to SYSTEM.simout['t'] (np.array)")
-            self.system.simout["y"] = raw_simouts[0].y
+            self.simout["t"] = raw_simouts[0].t
+            self.system.log.info(f"\tTime saved to simout['t'] (np.array)")
+            self.simout["y"] = raw_simouts[0].y
             for _, data in self.system.species.items():
-                data.simout["y"] = self.system.simout["y"][data.index]
+                data.simout["y"] = self.simout["y"][data.index]
             self.system.log.info(f"\tConcentrations saved respectively to SYSTEM.species[NAME].simout['y'] (np.array)")
             if dense_output:
-                self.system.simout["soln_continuous"] = raw_simouts[0].sol
-                self.system.log.info(f"\tSaving continuous solution function to SYSTEM.simout['soln_continuous'](t) (scipy.integrate.ODESolution)")
+                self.simout["soln_continuous"] = raw_simouts[0].sol
+                self.system.log.info(f"\tSaving continuous solution function to simout['soln_continuous'](t) (scipy.integrate.ODESolution)")
             else:
-                self.system.simout["soln_continuous"] = None
-                self.system.log.info("\tNot saving continuous solution. Use dense_output=True to save it to SYSTEM.simout['soln_continuous']")
+                self.simout["soln_continuous"] = None
+                self.system.log.info("\tNot saving continuous solution. Use dense_output=True to save it to simout['soln_continuous']")
         else:
-            self.system.simout["t"] = [raw_simout.t for raw_simout in raw_simouts] 
-            self.system.log.info(f"\t{y0_mat_len} time vectors saved to SYSTEM.simout['t'] (list of np.arrays)")
-            self.system.simout["y"] = [raw_simout.y for raw_simout in raw_simouts]
+            self.simout["t"] = [raw_simout.t for raw_simout in raw_simouts] 
+            self.system.log.info(f"\t{y0_mat_len} time vectors saved to simout['t'] (list of np.arrays)")
+            self.simout["y"] = [raw_simout.y for raw_simout in raw_simouts]
             for _, data in self.system.species.items():
-                data.simout["y"] = [y[data.index] for y in self.system.simout["y"]]
+                data.simout["y"] = [y[data.index] for y in self.simout["y"]]
             self.system.log.info(f"\t{y0_mat_len} concentration vectors saved respectively to SYSTEM.species[NAME].simout['y'] (list of np.arrays)")
             if dense_output:
-                self.system.simout["soln_continuous"] = [raw_simout.sol for raw_simout in raw_simouts] 
-                self.system.log.info(f"\tSaving list of continuous solution functions to SYSTEM.simout['soln_continuous'] (list of scipy.integrate.ODESolution's)")
+                self.simout["soln_continuous"] = [raw_simout.sol for raw_simout in raw_simouts] 
+                self.system.log.info(f"\tSaving list of continuous solution functions to simout['soln_continuous'] (list of scipy.integrate.ODESolution's)")
             else:
-                self.system.simout["soln_continuous"] = None
-                self.system.log.info("\tNot saving continuous solutions. Use dense_output=True to save them to SYSTEM.simout['soln_continuous']")
+                self.simout["soln_continuous"] = None
+                self.system.log.info("\tNot saving continuous solutions. Use dense_output=True to save them to simout['soln_continuous']")
         return
 

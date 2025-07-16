@@ -1,5 +1,5 @@
 import numpy as np
-from .base_simulator import BaseSimulator
+from .base import BaseSimulator
 
     #TODO: add an option called "continue" which takes an integer which points to the index of the run that its continuing from
     #TODO: precompile (repeatable) algo in c or fortran

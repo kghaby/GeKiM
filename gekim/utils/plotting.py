@@ -4,6 +4,10 @@ from matplotlib.colors import LinearSegmentedColormap
 import matplotlib.pyplot as plt
 from colorsys import rgb_to_hsv, hsv_to_rgb
 import gc
+from typing import Union, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from gekim.schemes.scheme import Scheme
 
 def clear_fig(fig: plt.Figure):
     """Clear and garbage collect a matplotlib figure"""
@@ -13,8 +17,11 @@ def clear_fig(fig: plt.Figure):
     gc.collect()
     return
 
-def assign_colors_to_species(schemes: dict, saturation_range: tuple = (0.5, 0.7), lightness_range: tuple = (0.3, 0.4), 
-                            method: str = None, offset: float = 0, overwrite_existing=False, seed: int = None):
+def assign_colors_to_species(schemes: dict, method: str = None,
+                             overwrite_existing=False,
+                             saturation_range: tuple = (0.5, 0.7), 
+                             lightness_range: tuple = (0.3, 0.4), 
+                             offset: float = 0, seed: int = None):
     """
     Assigns a distinct and aesthetically pleasing color to each species in a dictionary or a single kinetic scheme.
     Uses either a fixed or golden ratio based distribution for hues. Optionally seeds the randomness for consistent results.
@@ -23,16 +30,17 @@ def assign_colors_to_species(schemes: dict, saturation_range: tuple = (0.5, 0.7)
     ----------
     schemes : dict
         Dictionary of kinetic scheme dictionaries or a single kinetic scheme dictionary.
-    saturation_range : tuple
-        Min and max saturation values.
-    lightness_range : tuple
-        Min and max lightness values.
     method : str
-        "GR" for golden ratio hue distribution; None for linear distribution.
-    offset : float
-        Offset value for the hues.
+        "GR" for golden ratio hue distribution.
+        None for linear distribution.
     overwrite_existing : bool
         If True, overwrite existing colors; if False, assign colors only to species without colors.
+    saturation_range : tuple
+        Min and max saturation values. Only applicable to "GR" and linear methods.
+    lightness_range : tuple
+        Min and max lightness values. Only applicable to "GR" and linear methods.
+    offset : float
+        Offset value for the hues. Only applicable to "GR" and linear methods.
     seed : int 
         Seed for random number generator for reproducible color variations.
 
@@ -47,7 +55,11 @@ def assign_colors_to_species(schemes: dict, saturation_range: tuple = (0.5, 0.7)
         # else:
         #     color = cmap(i / len(permutations))
     #TODO: xkcd method for cycling through xkcd colors
-    if not isinstance(schemes, dict):
+    #TODO: support preset color dict
+    #TODO: support scheme objects directly
+    if isinstance(schemes, dict):
+        pass
+    else:
         raise ValueError("Input should be a dictionary of schemes or a single scheme formatted as a dictionary.")
     
     single_scheme = False

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gekim"
-version = "0.7.1"
+version = "0.7.3"
 authors = [
     {name = "Kyle Ghaby", email = "kyleghaby@gmail.com"},
 ]
@@ -33,5 +33,5 @@ dependencies = [
 ]
 
 [tool.setuptools]
-packages = ["gekim"]
+packages = { find = {} }
 include-package-data = true 

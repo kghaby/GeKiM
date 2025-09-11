@@ -2,7 +2,7 @@ import numpy as np
 from scipy.integrate import solve_ivp
 from sympy import symbols, Matrix, prod, pretty, zeros, lambdify
 
-from gekim.simulators.base import BaseSimulator
+from .base import BaseSimulator
 
 class ODESolver(BaseSimulator):
     """

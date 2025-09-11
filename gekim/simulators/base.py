@@ -4,7 +4,7 @@ from itertools import product
 import weakref
 from typing import cast, Union
 
-from gekim.systems.system import System
+from ..systems.system import System
 
 class BaseSimulator(ABC):
     def __init__(self, system: System):

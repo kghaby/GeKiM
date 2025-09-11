@@ -4,11 +4,11 @@ from lmfit.model import ModelResult
 from typing import Union
 from multiprocessing import Pool, cpu_count, Queue, Process
 
-from gekim.systems.system import System
-from gekim.simulators.ode_solver import ODESolver
-from gekim.utils.helpers import update_dict, chunks, printer, CaptureOutput
-from gekim.utils.fitting import general_fit, merge_params
-#from gekim.utils.experiments import ExperimentResult
+from .....systems.system import System
+from .....simulators.ode_solver import ODESolver
+from .....utils.helpers import update_dict, chunks, printer, CaptureOutput
+from .....utils.fitting import general_fit, merge_params
+#from .....utils.experiments import ExperimentResult
 
 #TODO: fit to scheme. meaning yuo make a scheme without values for the transitions and fit it to occ data to see what values of rates satisfy curve
 #TODO: class-based fittings will prob be better so that i can have baseclasses, reducing lots of reptition (esp docstrings) 

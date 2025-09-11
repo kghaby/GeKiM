@@ -3,10 +3,10 @@ from typing import Union, Optional
 from sympy import Symbol
 from copy import deepcopy
 
-from gekim.schemes.species import Species
-from gekim.schemes.transition import Transition
-from gekim.utils.plotting import assign_colors_to_species
-from gekim.utils.logging import Logger
+from .species import Species
+from .transition import Transition
+from ..utils.plotting import assign_colors_to_species
+from ..utils.logging import Logger
 
 class Scheme:
     """

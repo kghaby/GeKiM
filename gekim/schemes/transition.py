@@ -2,7 +2,8 @@ from dataclasses import dataclass, field
 import re
 from sympy import symbols, Symbol
 from typing import Union, Optional
-from gekim.utils.helpers import integerable_float
+
+from ..utils.helpers import integerable_float
 
 @dataclass
 class Transition:

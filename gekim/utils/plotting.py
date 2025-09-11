@@ -6,8 +6,8 @@ from colorsys import rgb_to_hsv, hsv_to_rgb
 import gc
 from typing import Union, TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from gekim.schemes.scheme import Scheme
+# if TYPE_CHECKING:
+#     from ..schemes.scheme import Scheme
 
 def clear_fig(fig: plt.Figure):
     """Clear and garbage collect a matplotlib figure"""

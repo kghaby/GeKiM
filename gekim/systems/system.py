@@ -3,11 +3,11 @@ from collections import defaultdict
 from sympy import Symbol
 from typing import Optional, Union
 
-from gekim.utils.logging import Logger
-from gekim.schemes.scheme import Scheme
-from gekim.schemes.species import Species
-from gekim.schemes.transition import Transition
-from gekim.systems.path import Path
+from ..utils.logging import Logger
+from ..schemes.scheme import Scheme
+from ..schemes.species import Species
+from ..schemes.transition import Transition
+from .path import Path
 
 class System:
     """

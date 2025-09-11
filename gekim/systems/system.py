@@ -40,7 +40,7 @@ class System:
         self.scheme = scheme # invoke setter to validate and set scheme
         
         self.simulator = None
-        self.log.info(f"System initialized successfully.")
+        self.log.info("System initialized successfully.")
         self.log.info("="*80)
 
     @property
@@ -59,14 +59,17 @@ class System:
     @scheme.setter
     def scheme(self, config: Union[dict, Scheme, None]):
         if config is None:
-            self._scheme = Scheme()
+            self._scheme = Scheme(log=self.log)
             self.log.info("Initialized empty Scheme.\n")
         elif isinstance(config, dict):
-            self._scheme = Scheme(config)
+            self._scheme = Scheme(config, log=self.log)
             self.log.info("Initialized Scheme from dict.\n")
         elif isinstance(config, Scheme):
             self._scheme = config
-            self.log.info("Scheme object already initialized.\n")
+            self.log.info("Scheme object already initialized.")
+            self.log.info("\tAssigning System logger to Scheme.")
+            self._scheme.log = self.log
+            
         else:
             raise TypeError("scheme must be None, dict, or Scheme")
         
@@ -86,8 +89,8 @@ class System:
         if self.simulator and self.simulator.simin:
             return self.simulator.simin
         else:
-            self.log.error(f"Simulator not set or simin not initialized. "
-                           f"Use System.set_simulator() to set a simulator.")
+            self.log.error("Simulator not set or simin not initialized. "
+                           "Use System.set_simulator() to set a simulator.")
         return {}
 
     @property
@@ -95,8 +98,8 @@ class System:
         if self.simulator and self.simulator.simout:
             return self.simulator.simout
         else:
-            self.log.error(f"Simulator not set or simout not initialized. "
-                           f"Use System.set_simulator() to set a simulator.")
+            self.log.error("Simulator not set or simout not initialized. "
+                           "Use System.set_simulator() to set a simulator.")
         return {}
 
     def set_scheme(self, scheme: Union[dict, Scheme], name: Optional[str] = None,
@@ -122,7 +125,7 @@ class System:
             scheme = Scheme(scheme, name=name, color_kwargs=color_kwargs)
             self.log.info("Initialized Scheme from dict.")
         self.scheme = scheme
-        self.log.info(f"Scheme set successfully.")
+        self.log.info("Scheme set successfully.")
         self.log.info(self.scheme)
         self.log.info("="*80)
         return self.scheme
@@ -473,7 +476,7 @@ class System:
         # Sort combined paths by combined probability
         sorted_combined_paths = dict(sorted(combined_paths.items(), key=lambda item: item[1]['combined_probability'], reverse=True))
 
-        self.log.info(f"\nSpecies sets and their combined probabilities (sorted):")
+        self.log.info("\nSpecies sets and their combined probabilities (sorted):")
         for species_set, data in sorted_combined_paths.items():
             prob_fmt = "{:.2e}".format(data['combined_probability'])
             self.log.info(f"Combined P: {prob_fmt}, Species: {species_set}")

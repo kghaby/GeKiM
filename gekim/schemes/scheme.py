@@ -6,6 +6,7 @@ from copy import deepcopy
 from gekim.schemes.species import Species
 from gekim.schemes.transition import Transition
 from gekim.utils.plotting import assign_colors_to_species
+from gekim.utils.logging import Logger
 
 class Scheme:
     """
@@ -13,9 +14,10 @@ class Scheme:
     Can be built from a config dictionary or by adding species/transitions programmatically.
     """
     def __init__(self, config: Optional[dict] = None, name: Optional[str] = None,
-                 color_kwargs: Optional[dict] = None):
+                 color_kwargs: Optional[dict] = None, log: Logger = None, quiet: bool = False):
         self.name = name if name else "Unnamed"
-        
+        self.log = log if log else Logger(quiet=quiet)
+
         # Preserve insertion order for species and transitions
         self.species: OrderedDict[str, Species] = OrderedDict()
         self.transitions: OrderedDict[str, Transition] = OrderedDict()
@@ -60,10 +62,10 @@ class Scheme:
                      combination_rule=combination_rule
                      )
         self.species[name] = sp
-        
         # if color is None:
         #     self._color_species()
-        
+        self._reindex_species()
+        self.log.info(f"Added species '{name}' with initial concentration {y0} at index {sp.index}.")
         return sp
 
     def remove_species(self, name: str):
@@ -77,6 +79,7 @@ class Scheme:
         # Remove species
         del self.species[name]
         self._reindex_species()
+        self.log.info(f"Removed species '{name}'.")
 
     def add_transition(self, 
                        name: str, 
@@ -94,6 +97,8 @@ class Scheme:
                         label=label
                         )
         self.transitions[name] = tr
+        self._reindex_transitions()
+        self.log.info(f"Added transition '{name}' with rate {k} at index {tr.index}.")
         return tr
 
     def remove_transition(self, name: str):
@@ -101,6 +106,7 @@ class Scheme:
             raise KeyError(f"Transition '{name}' not found.")
         del self.transitions[name]
         self._reindex_transitions()
+        self.log.info(f"Removed transition '{name}'.")
 
     def load_from_dict(self, config: dict):
         if 'species' not in config or 'transitions' not in config:

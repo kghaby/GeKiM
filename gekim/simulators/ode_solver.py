@@ -432,14 +432,14 @@ class ODESolver(BaseSimulator):
     def _process_simouts(self, raw_simouts: list, y0_mat_len: int, dense_output=False):
         if y0_mat_len == 1:
             self.simout["t"] = raw_simouts[0].t
-            self.system.log.info(f"\tTime saved to simout['t'] (np.array)")
+            self.system.log.info("\tTime saved to simout['t'] (np.array)")
             self.simout["y"] = raw_simouts[0].y
             for _, data in self.system.species.items():
                 data.simout["y"] = self.simout["y"][data.index]
-            self.system.log.info(f"\tConcentrations saved respectively to SYSTEM.species[NAME].simout['y'] (np.array)")
+            self.system.log.info("\tConcentrations saved respectively to SYSTEM.species[NAME].simout['y'] (np.array)")
             if dense_output:
                 self.simout["soln_continuous"] = raw_simouts[0].sol
-                self.system.log.info(f"\tSaving continuous solution function to simout['soln_continuous'](t) (scipy.integrate.ODESolution)")
+                self.system.log.info("\tSaving continuous solution function to simout['soln_continuous'](t) (scipy.integrate.ODESolution)")
             else:
                 self.simout["soln_continuous"] = None
                 self.system.log.info("\tNot saving continuous solution. Use dense_output=True to save it to simout['soln_continuous']")
@@ -452,7 +452,7 @@ class ODESolver(BaseSimulator):
             self.system.log.info(f"\t{y0_mat_len} concentration vectors saved respectively to SYSTEM.species[NAME].simout['y'] (list of np.arrays)")
             if dense_output:
                 self.simout["soln_continuous"] = [raw_simout.sol for raw_simout in raw_simouts] 
-                self.system.log.info(f"\tSaving list of continuous solution functions to simout['soln_continuous'] (list of scipy.integrate.ODESolution's)")
+                self.system.log.info("\tSaving list of continuous solution functions to simout['soln_continuous'] (list of scipy.integrate.ODESolution's)")
             else:
                 self.simout["soln_continuous"] = None
                 self.system.log.info("\tNot saving continuous solutions. Use dense_output=True to save them to simout['soln_continuous']")

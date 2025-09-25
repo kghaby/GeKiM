@@ -81,3 +81,9 @@ GeKiM is licensed under the GPL-3.0.
 ## Contact
 
 <kyleghaby@gmail.com>
+
+## Citation
+
+If you use this software, please cite:
+
+Ghaby, K.; Roux, B. Kinetic Modeling of Covalent Inhibition: Effects of Rapidly Fluctuating Intermediate States. *J. Chem. Inf. Model.* **2025**. https://doi.org/10.1021/acs.jcim.5c00952

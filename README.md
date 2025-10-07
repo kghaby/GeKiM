@@ -76,7 +76,7 @@ If you have suggestions or want to contribute code, please feel free to open an 
 
 ## License
 
-GeKiM is licensed under the GPL-3.0.
+GeKiM is licensed under MIT.
 
 ## Contact
 

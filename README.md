@@ -68,7 +68,7 @@ For more detailed examples, please refer to the examples directory.
 
 ## Documentation
 
-Documentation is pending, but the important functions have docstrings. 
+Documentation pages are pending, but the functions have docstrings. 
 
 Example Jupyter Notebooks where **GeKiM** has been applied to model and analyze irreversible enzyme inhibition:
 

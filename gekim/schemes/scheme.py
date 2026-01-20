@@ -29,7 +29,7 @@ class Scheme:
         self.color_kwargs = color_kwargs if color_kwargs else {}
         if self.num_species > 0:
             self.log.info(f"Assigning colors to species in scheme '{self.name}'.")
-            self._color_species()
+            self.color_species()
             
     def __repr__(self):
         def _fmt_stoich(items):
@@ -167,7 +167,7 @@ class Scheme:
         return cfg
 
     
-    def _color_species(self, color_kwargs: Optional[dict] = None):
+    def color_species(self, color_kwargs: Optional[dict] = None):
         """
         Assign colors to species based on the color_kwargs.
         Uses `gekim.utils.plotting.assign_colors_to_species()`.

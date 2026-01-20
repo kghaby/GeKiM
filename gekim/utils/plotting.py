@@ -6,8 +6,8 @@ from colorsys import rgb_to_hsv, hsv_to_rgb
 import gc
 from typing import Union, TYPE_CHECKING
 
-# if TYPE_CHECKING:
-#     from ..schemes.scheme import Scheme
+if TYPE_CHECKING:
+    from ..schemes.scheme import Scheme
 
 def clear_fig(fig: plt.Figure):
     """Clear and garbage collect a matplotlib figure"""
@@ -17,106 +17,179 @@ def clear_fig(fig: plt.Figure):
     gc.collect()
     return
 
-def assign_colors_to_species(schemes: dict, method: str = None,
+def assign_colors_to_species(schemes: Union[dict, "Scheme"], method: str = "preset1",
                              overwrite_existing=False,
                              saturation_range: tuple = (0.5, 0.7), 
                              lightness_range: tuple = (0.3, 0.4), 
                              offset: float = 0, seed: int = None):
     """
-    Assigns a distinct and aesthetically pleasing color to each species in a dictionary or a single kinetic scheme.
-    Uses either a fixed or golden ratio based distribution for hues. Optionally seeds the randomness for consistent results.
+    Assign colors to species across one or more kinetic schemes.
 
     Parameters
     ----------
-    schemes : dict
-        Dictionary of kinetic scheme dictionaries or a single kinetic scheme dictionary.
-    method : str
-        "GR" for golden ratio hue distribution.
-        None for linear distribution.
-    overwrite_existing : bool
-        If True, overwrite existing colors; if False, assign colors only to species without colors.
-    saturation_range : tuple
-        Min and max saturation values. Only applicable to "GR" and linear methods.
-    lightness_range : tuple
-        Min and max lightness values. Only applicable to "GR" and linear methods.
-    offset : float
-        Offset value for the hues. Only applicable to "GR" and linear methods.
-    seed : int 
-        Seed for random number generator for reproducible color variations.
+    schemes : dict or gekim.Scheme
+        One of the following:
+        - Single scheme config dictionary with keys ``{"species", "transitions"}``
+        - Dictionary mapping names to scheme config dictionaries
+        - Single :class:`gekim.Scheme` object
+        - Dictionary mapping names to :class:`gekim.Scheme` objects
+
+    method : {"preset", "GR", "lindist"}, optional
+        Color assignment strategy.
+        - ``"preset"`` : Cycle through a fixed, hard-coded hex color palette (default)
+        - ``"GR"``      : Golden-ratio walk in hue space
+        - ``"lindist"`` : Linear hue distribution in HLS space
+
+    overwrite_existing : bool, optional
+        If ``True``, overwrite existing species colors.
+        If ``False``, assign colors only to species without a defined color.
+
+    saturation_range : tuple of float, optional
+        ``(min, max)`` saturation range for HLS-based methods (``"GR"``, ``"lindist"``).
+
+    lightness_range : tuple of float, optional
+        ``(min, max)`` lightness range for HLS-based methods (``"GR"``, ``"lindist"``).
+
+    offset : float, optional
+        Additive offset applied to hue values for HLS-based methods.
+
+    seed : int or None, optional
+        Seed for the random number generator controlling saturation/lightness
+        sampling, enabling reproducible color assignments.
 
     Returns
     -------
-    dict: Updated schemes with assigned colors. Edits original input dict.
+    dict or gekim.Scheme
+        Input schemes with species colors assigned in-place.
     """
-    #TODO: handle list of schemes and NState class
     #TODO: support cmaps
         # if hasattr(cmap, "colors"):
         #     color = cmap.colors[i%len(cmap.colors)]
         # else:
         #     color = cmap(i / len(permutations))
     #TODO: xkcd method for cycling through xkcd colors
-    #TODO: support preset color dict
-    #TODO: support scheme objects directly
-    if isinstance(schemes, dict):
-        pass
-    else:
-        raise ValueError("Input should be a dictionary of schemes or a single scheme formatted as a dictionary.")
     
-    single_scheme = False
-    if 'species' in schemes.keys() and 'transitions' in schemes.keys():
-        single_scheme = True
-        schemes = {'single_scheme': schemes}
+    preset1 = ['#3483eb', '#677d56', '#874ae8',  '#87c9ba', '#c95757', '#e69753', '#66bfd4', '#d466ad', '#879bc9', '#6672d4', '#d9c56f', '#6fd9a0', '#6fa0d9', '#e3b2ed', '#635c60', '#b2edb8', '#e8a0b6', '#3483eb', '#677d56', '#874ae8',  '#87c9ba', '#c95757', '#e69753', '#66bfd4', '#d466ad', '#879bc9', '#6672d4', '#d9c56f', '#6fd9a0', '#6fa0d9', '#e3b2ed', '#635c60', '#b2edb8', '#e8a0b6', '#3483eb', '#677d56', '#874ae8',  '#87c9ba', '#c95757', '#e69753', '#66bfd4', '#d466ad', '#879bc9', '#6672d4', '#d9c56f', '#6fd9a0', '#6fa0d9', '#e3b2ed', '#635c60', '#b2edb8', '#e8a0b6','#3483eb', '#677d56', '#874ae8',  '#87c9ba', '#c95757', '#e69753', '#66bfd4', '#d466ad', '#879bc9', '#6672d4', '#d9c56f', '#6fd9a0', '#6fa0d9', '#e3b2ed', '#635c60', '#b2edb8', '#e8a0b6', '#3483eb', '#677d56', '#874ae8',  '#87c9ba', '#c95757', '#e69753', '#66bfd4', '#d466ad', '#879bc9', '#6672d4', '#d9c56f', '#6fd9a0', '#6fa0d9', '#e3b2ed', '#635c60', '#b2edb8', '#e8a0b6','#3483eb', '#677d56', '#874ae8',  '#87c9ba', '#c95757', '#e69753', '#66bfd4', '#d466ad', '#879bc9', '#6672d4', '#d9c56f', '#6fd9a0', '#6fa0d9', '#e3b2ed', '#635c60', '#b2edb8', '#e8a0b6','#3483eb', '#677d56', '#874ae8',  '#87c9ba', '#c95757', '#e69753', '#66bfd4', '#d466ad', '#879bc9', '#6672d4', '#d9c56f', '#6fd9a0', '#6fa0d9', '#e3b2ed', '#635c60', '#b2edb8', '#e8a0b6', '#3483eb', '#677d56', '#874ae8',  '#87c9ba', '#c95757', '#e69753', '#66bfd4', '#d466ad', '#879bc9', '#6672d4', '#d9c56f', '#6fd9a0', '#6fa0d9']
 
-    # Retrieve unique species into a list. Don't use a set to preserve order.
+
+    def _is_scheme_obj(x) -> bool:
+        return hasattr(x, "species") and hasattr(x, "transitions")
+
+    def _is_scheme_cfg(x) -> bool:
+        return isinstance(x, dict) and ("species" in x) and ("transitions" in x)
+
+    def _iter_species_keys_from_obj(obj: "Scheme"):
+        return obj.species.keys()
+
+    def _iter_species_keys_from_cfg(cfg: dict):
+        return cfg.get("species", {}).keys()
+
+    def _get_existing_color_cfg(cfg: dict, sp: str):
+        d = cfg["species"].get(sp, {})
+        return d.get("color", None)
+
+    def _set_color_cfg(cfg: dict, sp: str, color: str):
+        cfg["species"].setdefault(sp, {})["color"] = color
+
+    def _get_existing_color_obj(obj: "Scheme", sp: str):
+        return getattr(obj.species[sp], "color", None)
+
+    def _set_color_obj(obj: "Scheme", sp: str, color: str):
+        obj.species[sp].color = color
+
+    # normalize input -> list of (kind, ref) where kind in {"cfg","obj"}
+    normalized = []
+
+    if _is_scheme_cfg(schemes):
+        normalized = [("cfg", schemes)]
+    elif _is_scheme_obj(schemes):
+        normalized = [("obj", schemes)]
+    elif isinstance(schemes, dict):
+        # dict of configs or dict of objects (may be mixed, but that's pathological; allow mixed anyway)
+        for v in schemes.values():
+            if _is_scheme_cfg(v):
+                normalized.append(("cfg", v))
+            elif _is_scheme_obj(v):
+                normalized.append(("obj", v))
+            else:
+                raise ValueError("Dict values must be Scheme objects or scheme config dicts.")
+        if not normalized:
+            return schemes
+    else:
+        raise ValueError("Input must be a Scheme, a scheme config dict, or a dict of those.")
+
+    # unique species in insertion order across all schemes
     unique_species = []
-    seen_species = set()
-    for scheme in schemes.values():
-        for species in scheme["species"].keys():
-            if species not in seen_species:
-                unique_species.append(species)
-                seen_species.add(species)
+    seen = set()
+    for kind, sch in normalized:
+        keys = _iter_species_keys_from_cfg(sch) if kind == "cfg" else _iter_species_keys_from_obj(sch)
+        for sp in keys:
+            if sp not in seen:
+                seen.add(sp)
+                unique_species.append(sp)
 
-    golden_ratio_conjugate = 0.618033988749895
-    hue = 0
-
-    n_colors = len(unique_species)
+    # initial mapping from pre-existing colors (first occurrence wins)
     color_mapping = {}
-    hues = np.linspace(0, 1, n_colors, endpoint=False)
-
-    # Add existing colors to mapping
     if not overwrite_existing:
-        for species in unique_species:
-            for scheme in schemes.values():
-                if species in scheme["species"] and "color" in scheme["species"][species]:
-                    color_mapping[species] = scheme["species"][species]["color"]
+        for sp in unique_species:
+            for kind, sch in normalized:
+                if kind == "cfg":
+                    if sp in sch["species"]:
+                        c = _get_existing_color_cfg(sch, sp)
+                    else:
+                        c = None
+                else:
+                    if sp in sch.species:
+                        c = _get_existing_color_obj(sch, sp)
+                    else:
+                        c = None
+                if c:
+                    color_mapping[sp] = c
                     break
 
-    for i, species in enumerate(unique_species):
-        if not overwrite_existing and species in color_mapping:
-            continue
+    # assign new colors
+    n = len(unique_species)
+    if method is None:
+        method = "preset1"
+    if method not in {"preset1", "lindist", "GR"}:
+        raise ValueError("method must be one of {'preset1','lindist','GR'}.")
 
-        if method == "GR":
-            hue += golden_ratio_conjugate + offset
+    if method == "preset1":
+        for i, sp in enumerate(unique_species):
+            if not overwrite_existing and sp in color_mapping:
+                continue
+            color_mapping[sp] = preset1[i % len(preset1)]
+    else:
+        golden_ratio_conjugate = 0.618033988749895
+        hues = np.linspace(0.0, 1.0, n, endpoint=False)
+        hue = 0.0
+
+        rng = np.random.default_rng(seed)
+        for i, sp in enumerate(unique_species):
+            if not overwrite_existing and sp in color_mapping:
+                continue
+
+            if method == "GR":
+                hue = (hue + golden_ratio_conjugate + float(offset)) % 1.0
+            else:  # "lindist"
+                hue = (float(hues[i]) + float(offset)) % 1.0
+
+            lightness = float(rng.uniform(*lightness_range))
+            saturation = float(rng.uniform(*saturation_range))
+            r, g, b = colorsys.hls_to_rgb(hue, lightness, saturation)
+            color_mapping[sp] = f"#{int(r*255):02x}{int(g*255):02x}{int(b*255):02x}"
+
+    # write back into all schemes
+    for kind, sch in normalized:
+        if kind == "cfg":
+            for sp in sch["species"].keys():
+                if overwrite_existing or ("color" not in sch["species"][sp]) or (not sch["species"][sp].get("color")):
+                    _set_color_cfg(sch, sp, color_mapping[sp])
         else:
-            hue = hues[i] + offset
-        hue %= 1
+            for sp in sch.species.keys():
+                if overwrite_existing or (not _get_existing_color_obj(sch, sp)):
+                    _set_color_obj(sch, sp, color_mapping[sp])
 
-        np.random.seed(seed) # seed=None will try to read data from /dev/urandom (or the Windows analogue) if available or seed from the clock otherwise
-        lightness = np.random.uniform(*lightness_range)
-        np.random.seed(seed)
-        saturation = np.random.uniform(*saturation_range)
-
-        r, g, b = colorsys.hls_to_rgb(hue, lightness, saturation)
-        hex_color = f'#{int(r * 255):02x}{int(g * 255):02x}{int(b * 255):02x}'
-        color_mapping[species] = hex_color
-
-    for scheme in schemes.values():
-        for species in scheme["species"].keys():
-            if overwrite_existing or "color" not in scheme["species"][species]:
-                scheme["species"][species]["color"] = color_mapping.get(species, scheme["species"][species].get("color"))
-
-    if single_scheme:
-        schemes = schemes['single_scheme']
     return schemes
 
 def scale_cmap_saturation(cmap: LinearSegmentedColormap, scalar:float = 1.5) -> LinearSegmentedColormap:

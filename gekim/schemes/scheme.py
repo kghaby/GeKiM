@@ -27,16 +27,147 @@ class Scheme:
             self.load_from_dict(config)
             
         self.color_kwargs = color_kwargs if color_kwargs else {}
-        # if self.num_species > 0:
-        #     self._color_species()
+        if self.num_species > 0:
+            self.log.info(f"Assigning colors to species in scheme '{self.name}'.")
+            self._color_species()
             
     def __repr__(self):
-        lines = [f"Scheme '{self.name}': {self.num_species} species, {self.num_transitions} transitions",
-                 "Transitions:"]
-        lines += [f"  {repr(tr)}" for tr in self.transitions.values()]
+        def _fmt_stoich(items):
+            # items: Transition.{source,target} -> [(species_name, coeff), ...] or already strings via config
+            if not items:
+                return ""
+            out = []
+            for it in items:
+                if isinstance(it, (list, tuple)) and len(it) == 2:
+                    sp, nu = it
+                    if nu == 1:
+                        out.append(f"{sp}")
+                    else:
+                        out.append(f"{nu}{sp}")
+                else:
+                    out.append(str(it))
+            return " + ".join(out)
+
+        def _w(rows, key):
+            return max((len(str(r.get(key, ""))) for r in rows), default=0)
+
+        # --- species table ---
+        sp_rows = []
+        for i, sp in enumerate(self.species.values()):
+            sp_rows.append({
+                "i": i,
+                "name": sp.name,
+                "label": sp.label if sp.label is not None else "",
+                "y0": sp.y0,
+                "color": sp.color if getattr(sp, "color", None) is not None else "",
+                "comb": sp.combination_rule if getattr(sp, "combination_rule", None) is not None else "",
+            })
+
+        # --- transitions table ---
+        tr_rows = []
+        for i, tr in enumerate(self.transitions.values()):
+            tr_rows.append({
+                "i": i,
+                "name": tr.name,
+                "label": tr.label if getattr(tr, "label", None) is not None else "",
+                "k": f"{tr.k:.2e}",
+                "source": _fmt_stoich(getattr(tr, "source", [])),
+                "target": _fmt_stoich(getattr(tr, "target", [])),
+            })
+
+        lines = [f"Scheme '{self.name}': {self.num_species} species, {self.num_transitions} transitions"]
+
+        if sp_rows:
+            w_i = max(1, _w(sp_rows, "i"))
+            w_n = max(4, _w(sp_rows, "name"))
+            w_l = max(5, _w(sp_rows, "label"))
+            w_y = max(2, _w(sp_rows, "y0"))
+            w_c = max(5, _w(sp_rows, "color"))
+            w_b = max(4, _w(sp_rows, "comb"))
+
+            lines.append("")
+            lines.append("Species:")
+            lines.append(
+                f"  {'i':>{w_i}}  {'name':<{w_n}}  {'label':<{w_l}}  {'y0':>{w_y}}  {'color':<{w_c}}  {'comb':<{w_b}}"
+            )
+            lines.append(
+                f"  {'-'*w_i}  {'-'*w_n}  {'-'*w_l}  {'-'*w_y}  {'-'*w_c}  {'-'*w_b}"
+            )
+            for r in sp_rows:
+                lines.append(
+                    f"  {r['i']:>{w_i}}  {str(r['name']):<{w_n}}  {str(r['label']):<{w_l}}  {str(r['y0']):>{w_y}}  "
+                    f"{str(r['color']):<{w_c}}  {str(r['comb']):<{w_b}}"
+                )
+
+        if tr_rows:
+            w_i = max(1, _w(tr_rows, "i"))
+            w_n = max(4, _w(tr_rows, "name"))
+            w_l = max(5, _w(tr_rows, "label"))
+            w_k = max(1, _w(tr_rows, "k"))
+            w_s = max(6, _w(tr_rows, "source"))
+            w_t = max(6, _w(tr_rows, "target"))
+
+            lines.append("")
+            lines.append("Transitions:")
+            lines.append(
+                f"  {'i':>{w_i}}  {'name':<{w_n}}  {'label':<{w_l}}  {'k':>{w_k}}  {'source':<{w_s}}  {'target':<{w_t}}"
+            )
+            lines.append(
+                f"  {'-'*w_i}  {'-'*w_n}  {'-'*w_l}  {'-'*w_k}  {'-'*w_s}  {'-'*w_t}"
+            )
+            for r in tr_rows:
+                lines.append(
+                    f"  {r['i']:>{w_i}}  {str(r['name']):<{w_n}}  {str(r['label']):<{w_l}}  {str(r['k']):>{w_k}}  "
+                    f"{str(r['source']):<{w_s}}  {str(r['target']):<{w_t}}"
+                )
+
         return "\n".join(lines)
+
+    def get_config(self) -> dict:
+        cfg = {"species": {}, "transitions": {}}
+
+        for name, sp in self.species.items():
+            d = {
+                "y0": sp.y0,
+                "label": sp.label if sp.label is not None else name,
+            }
+            if getattr(sp, "color", None) is not None:
+                d["color"] = sp.color
+            if getattr(sp, "combination_rule", None) is not None:
+                d["combination_rule"] = sp.combination_rule
+            cfg["species"][name] = d
+
+        def _emit_terms(items):
+            out = []
+            for it in items or []:
+                if isinstance(it, (list, tuple)) and len(it) == 2:
+                    sp, nu = it
+                    if nu == 1:
+                        out.append(str(sp))
+                    elif isinstance(nu, int):
+                        out.append(f"{nu}{sp}")
+                    else:
+                        out.append([sp, nu])
+                else:
+                    out.append(str(it))
+            return out
+
+        for name, tr in self.transitions.items():
+            d = {
+                "k": tr.k,
+                "source": _emit_terms(getattr(tr, "source", [])),
+                "target": _emit_terms(getattr(tr, "target", [])),
+            }
+            if getattr(tr, "label", None) is not None:
+                d["label"] = tr.label
+            cfg["transitions"][name] = d
+
+        self.config = deepcopy(cfg)
+        self.log.info(f"Generated config dictionary for scheme '{self.name}' and assigned it to self.config.")
+        return cfg
+
     
-    def _color_species(self):
+    def _color_species(self, color_kwargs: Optional[dict] = None):
         """
         Assign colors to species based on the color_kwargs.
         Uses `gekim.utils.plotting.assign_colors_to_species()`.
@@ -44,6 +175,8 @@ class Scheme:
         if not self.species:
             raise ValueError("No species defined in the scheme.")
         
+        if color_kwargs:
+            self.color_kwargs.update(color_kwargs)
         assign_colors_to_species(self, **self.color_kwargs)
 
     def add_species(self, 

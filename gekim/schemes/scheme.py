@@ -195,8 +195,8 @@ class Scheme:
                      combination_rule=combination_rule
                      )
         self.species[name] = sp
-        # if color is None:
-        #     self._color_species()
+        if color is None:
+            self.color_species()
         self._reindex_species()
         self.log.info(f"Added species '{name}' with initial concentration {y0} at index {sp.index}.")
         return sp

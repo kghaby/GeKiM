@@ -2,6 +2,7 @@ import numpy as np
 from collections import defaultdict
 from sympy import Symbol
 from typing import Optional, Union
+from copy import deepcopy
 
 from ..utils.logging import Logger
 from ..schemes.scheme import Scheme
@@ -65,8 +66,8 @@ class System:
             self._scheme = Scheme(config, log=self.log)
             self.log.info("Initialized Scheme from dict.\n")
         elif isinstance(config, Scheme):
-            self._scheme = config
-            self.log.info("Scheme object already initialized.")
+            self._scheme = deepcopy(config)
+            self.log.info("Scheme object already initialized. Made a deepcopy to avoid editing original.")
             self.log.info("\tAssigning System logger to Scheme.")
             self._scheme.log = self.log
             

@@ -21,12 +21,13 @@ class Scheme:
         # Preserve insertion order for species and transitions
         self.species: OrderedDict[str, Species] = OrderedDict()
         self.transitions: OrderedDict[str, Transition] = OrderedDict()
-        
+       
+        self.color_kwargs = color_kwargs if color_kwargs else {}
+                
         if config:
             self.config = deepcopy(config)
             self.load_from_dict(config)
-            
-        self.color_kwargs = color_kwargs if color_kwargs else {}
+
         if self.num_species > 0:
             self.log.info(f"Assigning colors to species in scheme '{self.name}'.")
             self.color_species()

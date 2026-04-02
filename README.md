@@ -73,7 +73,7 @@ Documentation pages are pending, but the functions have docstrings.
 Example Jupyter Notebooks where GeKiM has been applied to model and analyze irreversible enzyme inhibition:
 
 1. [Covalent kinetics with rapid intermediates (2025)](https://github.com/RouxLab/covalent-kinetics-with-rapid-intermediates-2025)
-2. [Covalent kinase activity probes (2025)](https://github.com/RouxLab/covalent-kinase-activity-probes-2025)
+2. [Covalent kinase activity probes (2026)](https://github.com/RouxLab/covalent-kinase-activity-probes-2025)
 
 ## Contributing
 

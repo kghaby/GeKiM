@@ -17,7 +17,7 @@ def clear_fig(fig: plt.Figure):
     gc.collect()
     return
 
-def assign_colors_to_species(schemes: Union[dict, "Scheme"], method: str = "preset1",
+def assign_colors_to_species(schemes: Union[dict, "Scheme"], method: str = "preset2",
                              overwrite_existing=False,
                              saturation_range: tuple = (0.5, 0.7), 
                              lightness_range: tuple = (0.3, 0.4), 
@@ -69,7 +69,11 @@ def assign_colors_to_species(schemes: Union[dict, "Scheme"], method: str = "pres
         #     color = cmap(i / len(permutations))
     #TODO: xkcd method for cycling through xkcd colors
     
-    preset1 = ['#3483eb', '#677d56', '#874ae8',  '#87c9ba', '#c95757', '#e69753', '#66bfd4', '#d466ad', '#879bc9', '#6672d4', '#d9c56f', '#6fd9a0', '#6fa0d9', '#e3b2ed', '#635c60', '#b2edb8', '#e8a0b6', '#3483eb', '#677d56', '#874ae8',  '#87c9ba', '#c95757', '#e69753', '#66bfd4', '#d466ad', '#879bc9', '#6672d4', '#d9c56f', '#6fd9a0', '#6fa0d9', '#e3b2ed', '#635c60', '#b2edb8', '#e8a0b6', '#3483eb', '#677d56', '#874ae8',  '#87c9ba', '#c95757', '#e69753', '#66bfd4', '#d466ad', '#879bc9', '#6672d4', '#d9c56f', '#6fd9a0', '#6fa0d9', '#e3b2ed', '#635c60', '#b2edb8', '#e8a0b6','#3483eb', '#677d56', '#874ae8',  '#87c9ba', '#c95757', '#e69753', '#66bfd4', '#d466ad', '#879bc9', '#6672d4', '#d9c56f', '#6fd9a0', '#6fa0d9', '#e3b2ed', '#635c60', '#b2edb8', '#e8a0b6', '#3483eb', '#677d56', '#874ae8',  '#87c9ba', '#c95757', '#e69753', '#66bfd4', '#d466ad', '#879bc9', '#6672d4', '#d9c56f', '#6fd9a0', '#6fa0d9', '#e3b2ed', '#635c60', '#b2edb8', '#e8a0b6','#3483eb', '#677d56', '#874ae8',  '#87c9ba', '#c95757', '#e69753', '#66bfd4', '#d466ad', '#879bc9', '#6672d4', '#d9c56f', '#6fd9a0', '#6fa0d9', '#e3b2ed', '#635c60', '#b2edb8', '#e8a0b6','#3483eb', '#677d56', '#874ae8',  '#87c9ba', '#c95757', '#e69753', '#66bfd4', '#d466ad', '#879bc9', '#6672d4', '#d9c56f', '#6fd9a0', '#6fa0d9', '#e3b2ed', '#635c60', '#b2edb8', '#e8a0b6', '#3483eb', '#677d56', '#874ae8',  '#87c9ba', '#c95757', '#e69753', '#66bfd4', '#d466ad', '#879bc9', '#6672d4', '#d9c56f', '#6fd9a0', '#6fa0d9']
+    # A. Ghidini 2025
+    preset1 = ['#3483eb', '#677d56', '#874ae8',  '#87c9ba', '#c95757', '#e69753', '#66bfd4', '#d466ad', '#879bc9', '#6672d4', '#d9c56f', '#6fd9a0', '#6fa0d9', '#e3b2ed', '#635c60', '#b2edb8', '#e8a0b6']
+
+    # A. Ghidini 2026
+    preset2 = ['#3483eb', '#79ab54', '#a77bed', '#e3d65d', '#87c9ba', '#c95757', '#e69753', '#66bfd4', '#d466ad', '#70cc96', '#8d98f2', '#facc87', '#6fa0d9', '#e3b2ed', '#b2edb8', '#e66a7e', '#e8a0b6']
 
 
     def _is_scheme_obj(x) -> bool:
@@ -150,15 +154,23 @@ def assign_colors_to_species(schemes: Union[dict, "Scheme"], method: str = "pres
     # assign new colors
     n = len(unique_species)
     if method is None:
-        method = "preset1"
-    if method not in {"preset1", "lindist", "GR"}:
-        raise ValueError("method must be one of {'preset1','lindist','GR'}.")
+        method = "preset2"
+    if method not in {"preset","preset1", "preset2", "lindist", "GR"}:
+        raise ValueError("method must be one of {'preset' (directs to preset2),'preset1','preset2','lindist','GR'}.")
 
+    if method == "preset":
+        method = "preset2"  # alias for preset2 
+        
     if method == "preset1":
         for i, sp in enumerate(unique_species):
             if not overwrite_existing and sp in color_mapping:
                 continue
             color_mapping[sp] = preset1[i % len(preset1)]
+    elif method == "preset2":
+        for i, sp in enumerate(unique_species):
+            if not overwrite_existing and sp in color_mapping:
+                continue
+            color_mapping[sp] = preset2[i % len(preset2)]
     else:
         golden_ratio_conjugate = 0.618033988749895
         hues = np.linspace(0.0, 1.0, n, endpoint=False)

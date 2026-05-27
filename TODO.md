@@ -19,3 +19,5 @@
 - allow symbolic rate constants in case they are not known
 - Allow combination of models (continuous and discrete, brownian and markov)
    - eg hopping kinetically between two surfaces and then diffusing on the surfaces with BD)
+- fraction occupancy over entire simulation
+   - nice metric of convergence 

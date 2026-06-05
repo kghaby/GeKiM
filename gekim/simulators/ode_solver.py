@@ -8,15 +8,15 @@ class ODESolver(BaseSimulator):
     """
     Parameters
     ----------
-    system : NState
+    system : System
         The system object.
 
     Notes
     -----
-    The input NState instance, `system`, will be modified directly by the simulator, 
+    The input System instance, `system`, will be modified directly by the simulator, 
     whether the simulator is added as an attribute to `system` or not. 
 
-    Use as a simulator for NState class. Will generate and solve systems deterministically.
+    Use as a simulator for System class. Will generate and solve systems deterministically.
 
     During initialization, the following keys (and values) are added to the 
     `self.simin` dict:

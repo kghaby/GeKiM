@@ -11,7 +11,7 @@ class ODESolverMod(BaseSimulator):
     
     Parameters
     ----------
-    system : NState
+    system : System
         The system object.
     """
 

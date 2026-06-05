@@ -197,7 +197,7 @@ class System:
 
         Notes
         -----
-        The simulator is forced to ONLY take System (self) as an argument for initialization. 
+        Providing the simulator class here gives ONLY System (self) as an argument for initialization. 
         If the simulator requires additional arguments, initialize the simulator in an extra step, like so:
         ```python
         system.simulator = simulator(system, *args, **kwargs)
@@ -221,8 +221,8 @@ class System:
                     return simout
         else:
             self.log.info(f"Simulating with {simulator_class.__name__}.\n")
-            simulator_class = simulator_class(self)
-            simout = simulator_class.simulate(*args, **kwargs)
+            self.simulator = simulator_class(self)
+            simout = self.simulator.simulate(*args, **kwargs)
             if simout:
                 return simout
         return self

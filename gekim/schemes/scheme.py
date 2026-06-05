@@ -174,7 +174,7 @@ class Scheme:
         Uses `gekim.utils.plotting.assign_colors_to_species()`.
         """
         if not self.species:
-            raise ValueError("No species defined in the scheme.")
+            self.log.error("ERROR: No species defined in the scheme.")
         
         if color_kwargs:
             self.color_kwargs.update(color_kwargs)
@@ -182,13 +182,17 @@ class Scheme:
 
     def add_species(self, 
                     name: str, 
-                    y0: Union[float, list, Symbol] = 0.0,
+                    y0: Union[float, list, Symbol] = None,
                     label: Optional[str] = None, 
                     color: Optional[str] = None,
                     combination_rule: str = 'elementwise'
                     ) -> Species:
         if name in self.species:
-            raise ValueError(f"Species '{name}' already exists.")
+            self.log.error(f"ERROR: Species '{name}' already exists.")
+        if y0 is None:
+            self.log.warning(f"WARNING: Species '{name}' is missing initial concentration 'y0'. Defaulting to 0.0.")
+            y0 = 0.0
+            
         sp = Species(name=name, 
                      y0=y0, 
                      label=label, 
@@ -204,12 +208,12 @@ class Scheme:
 
     def remove_species(self, name: str):
         if name not in self.species:
-            raise KeyError(f"Species '{name}' not found.")
+            self.log.error(f"ERROR: Species '{name}' not found.")
         # Ensure no transitions involve this species
         involved = [tr_name for tr_name, tr in self.transitions.items()
                     if any(sp == name for sp, _ in tr.source) or any(sp == name for sp, _ in tr.target)]
         if involved:
-            raise RuntimeError(f"Cannot remove species '{name}' because it is involved in transitions: {involved}")
+            self.log.error(f"ERROR: Cannot remove species '{name}' because it is involved in transitions: {involved}")
         # Remove species
         del self.species[name]
         self._reindex_species()
@@ -223,7 +227,11 @@ class Scheme:
                        label: Optional[str] = None
                        ) -> Transition:
         if name in self.transitions:
-            raise ValueError(f"Transition '{name}' already exists.")
+            self.log.error(f"ERROR: Transition '{name}' already exists.")
+        if k is None:
+            self.log.warning(f"WARNING: Transition '{name}' is missing rate 'k'. Defaulting to 0.")
+            k = 0
+        
         tr = Transition(name=name, 
                         k=k, 
                         source=source or [], 
@@ -237,30 +245,42 @@ class Scheme:
 
     def remove_transition(self, name: str):
         if name not in self.transitions:
-            raise KeyError(f"Transition '{name}' not found.")
+            self.log.error(f"ERROR: Transition '{name}' not found.")
         del self.transitions[name]
         self._reindex_transitions()
         self.log.info(f"Removed transition '{name}'.")
 
     def load_from_dict(self, config: dict):
         if 'species' not in config or 'transitions' not in config:
-            raise ValueError("Config must contain 'species' and 'transitions' keys.")
+            self.log.error("ERROR: Config must contain 'species' and 'transitions' keys.")
         
         # Load species
         for sp_name, data in config['species'].items():
-            y0 = data.get('y0', 0.0)
+            y0 = data.get('y0')
             label = data.get('label')
             color = data.get('color')
             comb_rule = data.get('combination_rule', 'elementwise')
+            
+            # unsupported keys
+            for key in data.keys():
+                if key not in ['y0', 'label', 'color', 'combination_rule']:
+                    self.log.warning(f"WARNING: Species '{sp_name}' has unsupported config key '{key}'. Ignoring it.")
+            
             self.add_species(sp_name, y0=y0, label=label, color=color,
                              combination_rule=comb_rule)
             
         # Load transitions
         for tr_name, data in config['transitions'].items():
-            k = data.get('k', None)
+            k = data.get('k')
             source = data.get('source', [])
             target = data.get('target', [])
             label = data.get('label')
+            
+            # unsupported keys
+            for key in data.keys():
+                if key not in ['k', 'source', 'target', 'label']:
+                    self.log.warning(f"WARNING: Transition '{tr_name}' has unsupported config key '{key}'. Ignoring it.")
+                    
             self.add_transition(tr_name, k=k, source=source, target=target,
                                  label=label)
             
@@ -280,7 +300,7 @@ class Scheme:
         labels = set()
         for sp in self.species.values():
             if sp.label in labels:
-                raise ValueError(f"Duplicate species label '{sp.label}' detected.")
+                self.log.error(f"ERROR: Duplicate species label '{sp.label}' detected.")
             labels.add(sp.label)
 
     @property
